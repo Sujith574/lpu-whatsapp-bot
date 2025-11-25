@@ -45,7 +45,7 @@ async def webhook(request: Request):
 
 
 def send_message(to, text):
-    url = f"https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages"
+    url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
@@ -58,7 +58,9 @@ def send_message(to, text):
     requests.post(url, json=payload, headers=headers)
 
 
+
 def generate_reply(text):
     if not text:
         return "I received your message!"
     return f"You said: {text}\nYour LPU Assistant bot is working!"
+
