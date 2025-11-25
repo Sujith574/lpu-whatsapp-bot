@@ -6,21 +6,22 @@ import logging
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
+# ------------------------------------------------------
+# ENV VARIABLES
+# ------------------------------------------------------
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
-# GROQ (AI) details
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "mixtral-8x7b")
-BOT_NAME = "LPU Assistant"
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
-# -------------------------------
-# AI CALL
-# -------------------------------
+# ------------------------------------------------------
+# AI REPLY FUNCTION
+# ------------------------------------------------------
 def ai_reply(user_message):
     if not GROQ_API_KEY:
         return "AI backend is not configured."
@@ -37,11 +38,10 @@ def ai_reply(user_message):
                 "role": "system",
                 "content": (
                     "You are an AI assistant for Lovely Professional University (LPU). "
-                    "Always answer accurately, clearly, and politely. "
-                    "Give correct LPU rules, regulations, hostel timings, CGPA calculation, "
-                    "exam rules, attendance rules, discipline policies and campus guidelines. "
-                    "If a student asks for anything outside LPU academics or rules, "
-                    "still answer helpfully."
+                    "Always answer accurately using LPU rules, regulations, hostel timings, "
+                    "attendance rules, academic guidelines, reappear rules, CGPA calculation, "
+                    "fee deadlines, discipline rules, and campus policies. "
+                    "If asked something non-LPU, answer politely and helpfully."
                 )
             },
             {"role": "user", "content": user_message}
@@ -50,17 +50,28 @@ def ai_reply(user_message):
     }
 
     try:
-        res = requests.post(GROQ_URL, json=payload, headers=headers, timeout=30)
-        data = res.json()
-        return data["choices"][0]["message"]["content"]
+        response = requests.post(GROQ_URL, json=payload, headers=headers, timeout=20)
+        data = response.json()
+        logging.info(data)
+
+        # SUCCESS RESPONSE
+        if "choices" in data:
+            return data["choices"][0]["message"]["content"]
+
+        # ERROR RESPONSE
+        if "error" in data:
+            return f"Groq Error: {data['error'].get('message', 'Unknown error')}"
+
+        return "Unexpected AI response received."
+
     except Exception as e:
         logging.error(f"AI ERROR: {e}")
         return "Sorry, I am facing issues. Please try again."
 
 
-# -------------------------------
-# SEND MESSAGE
-# -------------------------------
+# ------------------------------------------------------
+# SEND MESSAGE TO WHATSAPP
+# ------------------------------------------------------
 def send_message(to, text):
     url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
     headers = {
@@ -72,15 +83,16 @@ def send_message(to, text):
         "to": to,
         "text": {"body": text}
     }
+
     try:
         requests.post(url, json=payload, headers=headers)
     except Exception as e:
         logging.error(f"Send message error: {e}")
 
 
-# -------------------------------
+# ------------------------------------------------------
 # VERIFY WEBHOOK
-# -------------------------------
+# ------------------------------------------------------
 @app.get("/webhook")
 async def verify(request: Request):
     params = dict(request.query_params)
@@ -89,9 +101,9 @@ async def verify(request: Request):
     return "Invalid verify token"
 
 
-# -------------------------------
-# RECEIVE MESSAGE
-# -------------------------------
+# ------------------------------------------------------
+# RECEIVE MESSAGES
+# ------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
@@ -111,10 +123,10 @@ async def webhook(request: Request):
         text = message.get("text", {}).get("body", "")
 
         # --------------------------
-        # WELCOME TRIGGERS
+        # WELCOME MESSAGE
         # --------------------------
         if text.lower() in ["hi", "hello", "hey", "menu", "start"]:
-            welcome = (
+            welcome_msg = (
                 "👋 Hello! I am your *LPU Assistant Chatbot*.\n\n"
                 "I can help you with:\n"
                 "• Attendance rules\n"
@@ -122,15 +134,16 @@ async def webhook(request: Request):
                 "• Hostel timings & regulations\n"
                 "• CGPA calculation\n"
                 "• Fee deadlines & fines\n"
-                "• Campus guidelines\n"
+                "• Discipline rules\n"
+                "• Academic processes\n"
                 "• Contact info (warden, academic office, etc.)\n\n"
-                "Just ask your question! 😊"
+                "Ask me anything! 😊"
             )
-            send_message(sender, welcome)
+            send_message(sender, welcome_msg)
             return {"status": "ok"}
 
         # --------------------------
-        # AI RESPONSE
+        # AI GENERATED REPLY
         # --------------------------
         reply = ai_reply(text)
         send_message(sender, reply)
