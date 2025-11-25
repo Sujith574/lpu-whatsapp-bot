@@ -14,7 +14,7 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "mixtral-8x7b")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -37,7 +37,7 @@ def ai_reply(user_message):
             {
                 "role": "system",
                 "content": (
-                    "You are an AI assistant for Lovely Professional University (LPU). "
+                    "Iam an AI assistant for Lovely Professional University (LPU). "
                     "Always answer accurately using LPU rules, regulations, hostel timings, "
                     "attendance rules, academic guidelines, reappear rules, CGPA calculation, "
                     "fee deadlines, discipline rules, and campus policies. "
@@ -152,3 +152,4 @@ async def webhook(request: Request):
         logging.error(f"Webhook error: {e}")
 
     return {"status": "ok"}
+
