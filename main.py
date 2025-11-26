@@ -18,10 +18,12 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 OPENWEATHER_API_KEY = "c3802e9e6d0cabfd189dde96a6f58fae"
 
+# *** UPDATED CREATOR MESSAGE ***
 CREATOR_MESSAGE = (
-    "I was created and developed by the Founders of Dream Sphere, "
-    "and I serve as the official AI Assistant for Lovely Professional University (LPU)."
+    "I was developed for Lovely Professional University (LPU) and created by Vennela Barnana."
 )
+
+# -------------- WEATHER FUNCTIONS -------------------
 
 def correct_city_name(city):
     try:
@@ -39,10 +41,12 @@ def get_weather(city):
         r = requests.get(url).json()
         if r.get("cod") != 200:
             return "❌ City not found. Please try another city."
+
         temp = r["main"]["temp"]
         feels = r["main"]["feels_like"]
         humidity = r["main"]["humidity"]
         desc = r["weather"][0]["description"].title()
+
         return (
             f"🌦 *Weather in {city.title()}*\n"
             f"🌡 Temperature: {temp}°C\n"
@@ -53,65 +57,83 @@ def get_weather(city):
     except:
         return "⚠️ Unable to fetch weather currently."
 
-def load_knowledge():
+# -------------- LOAD KNOWLEDGE BASE -------------------
+
+def load_file(name):
     try:
-        with open("lpu_knowledge.txt", "r", encoding="utf-8") as f:
+        with open(name, "r", encoding="utf-8") as f:
             return f.read()
     except:
-        return "Knowledge base not found."
+        return ""
 
-LPU_DATA = load_knowledge()
+LPU_KNOWLEDGE = load_file("lpu_knowledge.txt")
+LPU_SECURITY = load_file("lpu_security.txt")
+LPU_RESIDENTIAL = load_file("lpu_residential.txt")
+
+FULL_KNOWLEDGE = (
+    "\n\n===== LPU ACADEMIC & GENERAL RULES =====\n" + LPU_KNOWLEDGE +
+    "\n\n===== LPU SECURITY RULES =====\n" + LPU_SECURITY +
+    "\n\n===== LPU RESIDENTIAL HOSTEL HANDBOOK =====\n" + LPU_RESIDENTIAL
+)
+
+# -------------- RULE-BASED QUICK ANSWERS -------------------
 
 def rule_based(text):
     t = text.lower()
-    if (
-        "who built you" in t or
-        "who created you" in t or
-        "who made you" in t or
-        "who developed you" in t or
-        "developer" in t or
-        "founder" in t or
-        "your creator" in t or
-        "your developer" in t or
-        "who are your founders" in t
-    ):
+
+    # Developer / creator detection
+    if any(k in t for k in [
+        "who built", "who created", "who made", "developer", "founder",
+        "your creator", "your developer", "who built you", "who developed you"
+    ]):
         return CREATOR_MESSAGE
+
     rules = {
-        "attendance": "Minimum 75% attendance required. Below that is SOA (Shortage of Attendance).",
-        "soa": "SOA = Shortage of Attendance (below 75%).",
-        "hostel": "Hostel timings → Girls: 10 PM, Boys: 11 PM.",
-        "timing": "Hostel timings → Girls: 10 PM, Boys: 11 PM.",
-        "gate pass": "Gate Pass must be applied through UMS to exit campus.",
-        "night out": "Night-out requires parent approval + warden permission.",
-        "reappear": "Reappear fee is ₹500 per course. Only end-term marks are replaced.",
+        "attendance": "Minimum 75% attendance is mandatory. Below 75% = SOA.",
+        "soa": "SOA means Shortage of Attendance (below 75%).",
+        "hostel timing": "Girls: 10 PM • Boys: 11 PM",
+        "hostel timings": "Girls: 10 PM • Boys: 11 PM",
+        "gate pass": "Gate Pass is applied via UMS → Security & Safety → Online Sponsored Parent Pass / Hostel Leave.",
+        "night out": "Night-out requires parent permission + warden approval.",
+        "reappear": "Reappear fee is ₹500 per course. Only end-term marks change.",
         "cgpa": "CGPA = Σ(Credit × Grade Point) / ΣCredits.",
         "uniform": "Formal uniform mandatory Mon–Fri. Casual allowed Sat–Sun.",
-        "dress": "Formal uniform mandatory Mon–Fri. Casual allowed Sat–Sun.",
-        "fee": "Late fee approx ₹100/day. No admit card if fees pending.",
-        "library": "Silence mandatory. Late return of books is not allowed.",
-        "medical": "Visit University Hospital for medical attendance.",
-        "grievance": "Submit grievance via UMS → RMS (Relationship Management System).",
+        "dress": "Formal uniform mandatory Mon–Fri.",
+        "fee": "Late fee ~₹100/day. Admit card blocked if fees pending.",
+        "library": "Maintain silence. Late return of books may cause fines.",
+        "medical": "Visit Uni-Health Center for medical attendance.",
+        "grievance": "Submit grievance via UMS → RMS.",
+        "parking": "Parking allowed only in designated parking areas.",
+        "visitor": "Visitors allowed only with approved online gate pass.",
+        "mess": "Mess timings: Breakfast 7:15–9:30, Lunch 11:30–3, Dinner 7:30–9:30."
     }
-    for key in rules:
-        if key in t:
-            return rules[key]
+
+    for k in rules:
+        if k in t:
+            return rules[k]
+
     return None
+
+# -------------- AI REPLY -------------------
 
 def ai_reply(user_message):
     if not GROQ_API_KEY:
         return "AI backend is not configured."
+
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
+
     system_prompt = (
-        "You are the official AI Assistant for Lovely Professional University (LPU).\n"
-        "Use the LPU Knowledge Base to answer accurately.\n\n"
-        "IMPORTANT RULE:\n"
-        f"If anyone asks who built you or developed you, always answer: '{CREATOR_MESSAGE}'.\n"
-        "Never say LPU created you.\n\n"
-        f"LPU KNOWLEDGE BASE:\n{LPU_DATA}\n\n"
+        "You are the official LPU Assistant. You must follow all LPU rules.\n"
+        "If asked who built you, always reply exactly:\n"
+        f"'{CREATOR_MESSAGE}'.\n"
+        "Never say the university built you.\n"
+        "Below is the entire LPU Knowledge Base. Use it to answer accurately:\n\n"
+        f"{FULL_KNOWLEDGE}\n\n"
     )
+
     payload = {
         "model": GROQ_MODEL,
         "messages": [
@@ -120,25 +142,27 @@ def ai_reply(user_message):
         ],
         "temperature": 0.2
     }
+
     try:
         response = requests.post(GROQ_URL, json=payload, headers=headers, timeout=20)
         data = response.json()
         logging.info(data)
+
         if "choices" in data:
             reply = data["choices"][0]["message"]["content"]
-        elif "error" in data:
-            return f"Groq Error: {data['error'].get('message', 'Unknown error')}"
         else:
             return "Unexpected AI response."
-        rl = reply.lower()
-        if (
-            ("created" in rl or "developed" in rl or "built" in rl or "founder" in rl)
-            and ("lpu" in rl or "university" in rl or "official" in rl)
-        ):
-            reply = CREATOR_MESSAGE
+
+        # Safety fix for developer question
+        if "lpu" in reply.lower() and "created" in reply.lower():
+            return CREATOR_MESSAGE
+
         return reply
+
     except:
         return "AI is facing issues. Please try again later."
+
+# -------------- SEND MESSAGE -------------------
 
 def send_message(to, text):
     url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
@@ -156,6 +180,8 @@ def send_message(to, text):
     except:
         pass
 
+# -------------- WEBHOOK VERIFY -------------------
+
 @app.get("/webhook")
 async def verify(request: Request):
     params = dict(request.query_params)
@@ -163,10 +189,13 @@ async def verify(request: Request):
         return int(params.get("hub.challenge"))
     return "Invalid verify token"
 
+# -------------- WEBHOOK HANDLER -------------------
+
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
     logging.info(data)
+
     try:
         entry = data["entry"][0]
         message = entry["changes"][0]["value"].get("messages", [])[0]
@@ -175,67 +204,61 @@ async def webhook(request: Request):
     except:
         return {"status": "ignored"}
 
+    # WELCOME MESSAGE
     if text.lower() in ["hi", "hello", "hey", "menu", "start"]:
         welcome = (
             "👋 Hello! I am your *LPU Assistant Bot*.\n\n"
-            "Ask me anything about:\n"
-            "• Attendance rules\n"
-            "• Hostel timings\n"
-            "• Reappear & exam rules\n"
-            "• CGPA calculation\n"
-            "• Fees & fines\n"
-            "• Dress code\n"
-            "• LPU regulations\n"
-            "• Academic processes\n\n"
+            "You can ask me about:\n"
+            "• Attendance & SOA rules\n"
+            "• Hostel rules & timings\n"
+            "• Residential handbook details\n"
+            "• Gate pass & leave rules\n"
+            "• Reappear/exam guidelines\n"
+            "• Parking, RFID, security\n"
+            "• CGPA, fees, placements\n\n"
             "How can I help you today? 😊"
         )
         send_message(sender, welcome)
         return {"status": "ok"}
 
-    if text.lower() in ["time", "time now", "current time", "what is the time"]:
+    # TIME CHECK
+    if text.lower() in ["time", "time now", "current time"]:
         india = pytz.timezone("Asia/Kolkata")
         now = datetime.datetime.now(india)
-        current_time = now.strftime("%I:%M %p")
-        send_message(sender, f"⏰ Current time: {current_time}")
+        send_message(sender, f"⏰ Current time: {now.strftime('%I:%M %p')}")
         return {"status": "ok"}
 
+    # WEATHER
     t = text.lower()
-    weather_keywords = ["weather", "wether", "waether", "wheather", "climate", "temp", "temprature", "temperature"]
-
+    weather_keywords = ["weather", "temp", "temperature", "climate"]
     if any(k in t for k in weather_keywords):
-        clean = (
+        city = (
             t.replace("weather", "")
-             .replace("wether", "")
-             .replace("waether", "")
-             .replace("wheather", "")
-             .replace("climate", "")
              .replace("temp", "")
              .replace("temperature", "")
-             .replace("temprature", "")
-             .replace("in", "")
-             .replace("at", "")
-             .replace("of", "")
+             .replace("climate", "")
              .strip()
         )
 
-        if clean == "":
-            send_message(sender, "🌍 Please type like:\nweather hyderabad\nweather delhi\nweather london")
+        if city == "":
+            send_message(sender, "🌦 Please type:\nweather delhi\nweather mumbai\nweather london")
             return {"status": "ok"}
 
-        corrected = correct_city_name(clean)
+        corrected = correct_city_name(city)
         if not corrected:
-            send_message(sender, "⚠️ City not recognized. Try another city.")
+            send_message(sender, "⚠️ City not recognized.")
             return {"status": "ok"}
 
-        weather_report = get_weather(corrected)
-        send_message(sender, weather_report)
+        send_message(sender, get_weather(corrected))
         return {"status": "ok"}
 
+    # RULE BASED
     rb = rule_based(text)
     if rb:
         send_message(sender, rb)
         return {"status": "ok"}
 
+    # AI REPLY
     reply = ai_reply(text)
     send_message(sender, reply)
     return {"status": "ok"}
