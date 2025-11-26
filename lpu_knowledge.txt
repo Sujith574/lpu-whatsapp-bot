@@ -12,6 +12,7 @@ HOSTEL TIMINGS:
 - Boys Hostel In-time: 11:00 PM.
 - Leave Pass is required for hostel exit.
 - Night-out requires parent/guardian consent + warden approval.
+- leave apply path: ums > ums navigation > administrative > residential services > hostel leave application. 
 
 REAPPEAR RULES:
 - Reappear exam fee is ₹500 per course.
@@ -65,4 +66,5 @@ GRIEVANCE:
 
 PLACEMENTS:
 - Minimum CGPA requirement varies based on company.
+
 - Students must attend placement classes, pre-placement talks, and tests.
