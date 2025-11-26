@@ -15,8 +15,50 @@ PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+
+# ------------------------------------------------------
+# LOAD KNOWLEDGE BASE FILE
+# ------------------------------------------------------
+def load_knowledge():
+    try:
+        with open("lpu_knowledge.txt", "r", encoding="utf-8") as f:
+            return f.read()
+    except:
+        return "Knowledge base not found."
+
+LPU_DATA = load_knowledge()
+
+
+# ------------------------------------------------------
+# RULE-BASED REPLIES
+# ------------------------------------------------------
+def rule_based(text):
+    t = text.lower()
+
+    rules = {
+        "attendance": "Minimum 75% attendance required. Below that is SOA (Shortage of Attendance).",
+        "soa": "SOA = Shortage of Attendance (below 75%).",
+        "hostel": "Hostel timings → Girls: 10 PM, Boys: 11 PM.",
+        "timing": "Hostel timings → Girls: 10 PM, Boys: 11 PM.",
+        "gate pass": "Gate Pass must be applied through UMS to exit campus.",
+        "night out": "Night-out requires parent approval + warden permission.",
+        "reappear": "Reappear fee is ₹500 per course. Only end-term marks are replaced.",
+        "cgpa": "CGPA = Σ(Credit × Grade Point) / ΣCredits.",
+        "uniform": "Formal uniform mandatory Mon–Fri. Casual allowed Sat–Sun.",
+        "dress": "Formal uniform mandatory Mon–Fri. Casual allowed Sat–Sun.",
+        "fee": "Late fee approx ₹100/day. No admit card if fees pending.",
+        "library": "Silence mandatory. Late return of books is not allowed.",
+        "medical": "Visit University Hospital for medical attendance.",
+        "grievance": "Submit grievance via UMS → RMS (Relationship Management System).",
+    }
+
+    for key in rules:
+        if key in t:
+            return rules[key]
+
+    return None
 
 
 # ------------------------------------------------------
@@ -31,22 +73,20 @@ def ai_reply(user_message):
         "Content-Type": "application/json"
     }
 
+    system_prompt = (
+        "You are the official AI Assistant for Lovely Professional University (LPU).\n"
+        "Use the following knowledge base to answer questions accurately.\n"
+        "If the user asks something outside the knowledge base, answer politely using general knowledge.\n\n"
+        f"LPU KNOWLEDGE BASE:\n{LPU_DATA}\n\n"
+    )
+
     payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "Iam an AI assistant for Lovely Professional University (LPU). "
-                    "Always answer accurately using LPU rules, regulations, hostel timings, "
-                    "attendance rules, academic guidelines, reappear rules, CGPA calculation, "
-                    "fee deadlines, discipline rules, and campus policies. "
-                    "If asked something non-LPU, answer politely and helpfully."
-                )
-            },
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message}
         ],
-        "temperature": 0.3
+        "temperature": 0.2
     }
 
     try:
@@ -54,19 +94,17 @@ def ai_reply(user_message):
         data = response.json()
         logging.info(data)
 
-        # SUCCESS RESPONSE
         if "choices" in data:
             return data["choices"][0]["message"]["content"]
 
-        # ERROR RESPONSE
         if "error" in data:
             return f"Groq Error: {data['error'].get('message', 'Unknown error')}"
 
-        return "Unexpected AI response received."
+        return "Unexpected AI response."
 
     except Exception as e:
         logging.error(f"AI ERROR: {e}")
-        return "Sorry, I am facing issues. Please try again."
+        return "AI is facing issues. Please try again later."
 
 
 # ------------------------------------------------------
@@ -78,6 +116,7 @@ def send_message(to, text):
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
+
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
@@ -91,7 +130,7 @@ def send_message(to, text):
 
 
 # ------------------------------------------------------
-# VERIFY WEBHOOK
+# WEBHOOK VERIFICATION
 # ------------------------------------------------------
 @app.get("/webhook")
 async def verify(request: Request):
@@ -102,7 +141,7 @@ async def verify(request: Request):
 
 
 # ------------------------------------------------------
-# RECEIVE MESSAGES
+# RECEIVE MESSAGE
 # ------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -110,46 +149,40 @@ async def webhook(request: Request):
     logging.info(data)
 
     try:
-        entry = data.get("entry", [])[0]
-        changes = entry.get("changes", [])[0]
-        value = changes.get("value", {})
-        messages = value.get("messages", [])
-
-        if not messages:
-            return {"status": "ok"}
-
-        message = messages[0]
+        entry = data["entry"][0]
+        message = entry["changes"][0]["value"].get("messages", [])[0]
         sender = message["from"]
         text = message.get("text", {}).get("body", "")
 
-        # --------------------------
-        # WELCOME MESSAGE
-        # --------------------------
-        if text.lower() in ["hi", "hello", "hey", "menu", "start"]:
-            welcome_msg = (
-                "👋 Hello! I am your *LPU Assistant Chatbot*.\n\n"
-                "I can help you with:\n"
-                "• Attendance rules\n"
-                "• Exam & reappear rules\n"
-                "• Hostel timings & regulations\n"
-                "• CGPA calculation\n"
-                "• Fee deadlines & fines\n"
-                "• Discipline rules\n"
-                "• Academic processes\n"
-                "• Contact info (warden, academic office, etc.)\n\n"
-                "Ask me anything! 😊"
-            )
-            send_message(sender, welcome_msg)
-            return {"status": "ok"}
+    except:
+        return {"status": "ignored"}
 
-        # --------------------------
-        # AI GENERATED REPLY
-        # --------------------------
-        reply = ai_reply(text)
-        send_message(sender, reply)
+    # WELCOME MESSAGE
+    if text.lower() in ["hi", "hello", "hey", "menu", "start"]:
+        welcome = (
+            "👋 Hello! I am your *LPU Assistant Bot*.\n\n"
+            "Ask me anything about:\n"
+            "• Attendance rules\n"
+            "• Hostel timings\n"
+            "• Reappear & exam rules\n"
+            "• CGPA calculation\n"
+            "• Fees & fines\n"
+            "• Dress code\n"
+            "• LPU regulations\n"
+            "• Academic processes\n\n"
+            "How can I help you today? 😊"
+        )
+        send_message(sender, welcome)
+        return {"status": "ok"}
 
-    except Exception as e:
-        logging.error(f"Webhook error: {e}")
+    # RULE-BASED REPLY
+    rb = rule_based(text)
+    if rb:
+        send_message(sender, rb)
+        return {"status": "ok"}
+
+    # AI FALLBACK
+    reply = ai_reply(text)
+    send_message(sender, reply)
 
     return {"status": "ok"}
-
