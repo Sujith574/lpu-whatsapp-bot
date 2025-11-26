@@ -4,12 +4,11 @@ import os
 import logging
 import datetime
 import pytz
-import glob
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
-# ---------------- ENVIRONMENT VARIABLES ----------------
+# ---------------- ENV VARIABLES ----------------
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
@@ -20,47 +19,38 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "c3802e9e6d0cabfd189dde96a6f58fae")
 
-# ---------------- CREATOR RULE ----------------
+# ---------------- CREATOR MESSAGE ----------------
 CREATOR_MESSAGE = (
-    "I was developed for Lovely Professional University (LPU) and created by Vennela Barnana."
+    "I was developed for Lovely Professional University (LPU) "
+    "and created by Vennela Barnana."
 )
 
-# ---------------- LOAD ALL TXT FILES ----------------
-def load_all_sections():
-    data = ""
-    for file in sorted(glob.glob("sections/*.txt")):
-        try:
-            with open(file, "r", encoding="utf-8") as f:
-                name = file.replace("sections/", "")
-                data += f"\n\n===== {name.upper()} =====\n"
-                data += f.read()
-        except:
-            pass
-    return data
-
-FULL_KB = load_all_sections()
-
-# ---------------- WEATHER HELPERS ----------------
-def correct_city(city):
+# ================================================================
+#  WEATHER FUNCTIONS
+# ================================================================
+def correct_city_name(city):
     try:
         url = f"http://api.openweathermap.org/geo/1.0/direct?q={city}&limit=1&appid={OPENWEATHER_API_KEY}"
-        r = requests.get(url, timeout=8).json()
+        r = requests.get(url, timeout=7).json()
         if not r:
             return None
         return r[0]["name"]
     except:
         return None
 
+
 def get_weather(city):
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric"
-        r = requests.get(url, timeout=8).json()
+        r = requests.get(url, timeout=7).json()
         if r.get("cod") != 200:
-            return "❌ City not found. Please try again."
+            return "❌ City not found. Try another city."
+
         temp = r["main"]["temp"]
         feels = r["main"]["feels_like"]
         humidity = r["main"]["humidity"]
         desc = r["weather"][0]["description"].title()
+
         return (
             f"🌦 *Weather in {city.title()}*\n"
             f"🌡 Temperature: {temp}°C\n"
@@ -69,109 +59,139 @@ def get_weather(city):
             f"🌥 Condition: {desc}"
         )
     except:
-        return "⚠️ Unable to fetch weather currently."
+        return "⚠️ Weather service error."
 
-# ---------------- QUICK RULE-BASED ANSWERS ----------------
-def quick_reply(text):
+
+# ================================================================
+#  LOAD ALL SECTION FILES
+# ================================================================
+def load_sections():
+    sections_folder = "sections"
+    data = {}
+
+    if not os.path.exists(sections_folder):
+        return data
+
+    for filename in os.listdir(sections_folder):
+        if filename.endswith(".txt"):
+            with open(os.path.join(sections_folder, filename), "r", encoding="utf-8") as f:
+                key = filename.replace(".txt", "")
+                data[key] = f.read().strip()
+
+    return data
+
+
+SECTIONS = load_sections()
+
+
+# ================================================================
+#  FIND BEST ANSWER IN SECTION FILES
+# ================================================================
+def find_answer_in_sections(text):
     t = text.lower()
 
-    # Creator rule
-    if any(key in t for key in ["who created", "who built", "developer", "founder", "who made you"]):
+    for key, content in SECTIONS.items():
+        if key.replace("_", " ") in t:
+            return content
+
+    # keyword scanning
+    for key, content in SECTIONS.items():
+        if any(word in t for word in key.split("_")):
+            return content
+
+    return None
+
+
+# ================================================================
+#  RULE-BASED SYSTEM (forces LPU answers to come from data)
+# ================================================================
+def rule_based(text):
+    t = text.lower()
+
+    # Developer response rule
+    if any(k in t for k in [
+        "who built", "who made", "who created", "who developed",
+        "developer", "founder", "your creator", "your developer"
+    ]):
         return CREATOR_MESSAGE
 
-    # Time
-    if t in ["time", "time now", "current time", "what is the time"]:
-        india = pytz.timezone("Asia/Kolkata")
-        now = datetime.datetime.now(india).strftime("%I:%M %p")
-        return f"⏰ Current time: {now}"
+    # All LPU-related keywords → must use section data
+    lpu_keywords = [
+        "attendance", "soa", "hostel", "leave", "night out", "gate pass",
+        "mess", "food", "parking", "rfid", "security", "entry", "exit",
+        "visitor", "rms", "relationship management", "discipline",
+        "library", "medical", "placements", "transport", "wifi",
+        "network", "exam", "reappear", "cgpa", "fee", "fine", "rules",
+        "timings", "id card", "uniform", "dress code", "warden",
+        "otp", "check in", "check out", "day leave", "night leave"
+    ]
 
-    # Weather at LPU
-    if "weather" in t and ("lpu" in t or "phagwara" in t or "punjab" in t):
-        return get_weather("Phagwara")
+    if any(k in t for k in lpu_keywords):
+        return None  # means: MUST search data files
 
-    # Basic rules
-    rules = {
-        "attendance": "Minimum 75% attendance is mandatory. Below 75% = SOA.",
-        "soa": "SOA = Shortage of Attendance (below 75%).",
-        "cgpa": "CGPA = Σ(Credit × Grade Point) / ΣCredits.",
-        "reappear": "Reappear fee = ₹500 per course. Only end-term marks change.",
-        "hostel timing": "Girls: 10 PM • Boys: 11 PM.",
-        "mess": "Mess timings: Breakfast 7:15–9:30 • Lunch 11:30–3:00 • Dinner 7:30–9:30",
-        "night out": "Night-out requires parent approval + warden approval.",
-        "gate pass": "Gate pass via UMS → Security & Safety → Online Sponsored Parent Pass.",
-        "library": "Maintain silence. Late return fines apply.",
-        "medical": "Visit Uni-Health Center for medical treatment.",
-        "parking": "Park only in designated areas. Speed limit: 30 km/hr.",
+    return "AI"  # non-LPU question → AI allowed
+
+
+# ================================================================
+#  AI FALLBACK
+# ================================================================
+def ai_reply(user_message):
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
     }
-    for k, v in rules.items():
-        if k in t:
-            return v
-
-    return None  # allow fallback to AI
-
-# ---------------- AI HANDLER ----------------
-def ai_answer(msg):
-    if not GROQ_API_KEY:
-        return "AI backend not configured."
 
     system_prompt = (
-        "You are the official LPU Assistant bot.\n"
-        "Use the provided LPU rules & knowledge to answer accurately.\n"
-        f"If asked who created you, ALWAYS reply: '{CREATOR_MESSAGE}'.\n"
-        "Never say LPU created you.\n\n"
-        "All LPU rules, regulations, and policies are below:\n"
-        f"{FULL_KB}\n"
+        "You are an assistant. For LPU questions, use: 'Please ask LPU-related questions only.'\n"
     )
-
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
 
     payload = {
         "model": GROQ_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": msg}
+            {"role": "user", "content": user_message}
         ],
-        "temperature": 0.2,
-        "max_tokens": 250
+        "temperature": 0.4
     }
 
     try:
-        r = requests.post(GROQ_URL, json=payload, headers=headers, timeout=20).json()
-        if "choices" not in r:
-            return "AI error. Try again."
+        r = requests.post(GROQ_URL, json=payload, headers=headers, timeout=15).json()
+        return r["choices"][0]["message"]["content"]
+    except:
+        return "⚠️ AI engine busy. Try again."
 
-        reply = r["choices"][0]["message"]["content"]
 
-        # Enforce creator rule
-        if ("created" in reply.lower() or "developed" in reply.lower()) and "lpu" in reply.lower():
-            return CREATOR_MESSAGE
-
-        return reply
-
-    except Exception as e:
-        logging.error(e)
-        return "AI is facing issues. Try again later."
-
-# ---------------- SEND MESSAGE ----------------
+# ================================================================
+#  SEND MESSAGE TO WHATSAPP
+# ================================================================
 def send_message(to, text):
     url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json"
+    }
     payload = {"messaging_product": "whatsapp", "to": to, "text": {"body": text}}
 
     try:
         requests.post(url, json=payload, headers=headers, timeout=10)
-    except Exception as e:
-        logging.error(e)
+    except:
+        pass
 
-# ---------------- WEBHOOK VERIFY ----------------
+
+# ================================================================
+#  WEBHOOK VERIFY
+# ================================================================
 @app.get("/webhook")
 async def verify(request: Request):
     params = dict(request.query_params)
     if params.get("hub.verify_token") == VERIFY_TOKEN:
-        return int(params.get("hub.challenge"))
+        return int(params["hub.challenge"])
     return "Invalid verify token"
 
-# ---------------- WEBHOOK HANDLER ----------------
+
+# ================================================================
+#  MAIN WEBHOOK HANDLER
+# ================================================================
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
@@ -184,50 +204,67 @@ async def webhook(request: Request):
     except:
         return {"status": "ignored"}
 
-    # Welcome message
-    if text.lower() in ["hi", "hello", "hey", "start", "menu"]:
+    # ---------------------------------------------------------
+    # WELCOME message
+    # ---------------------------------------------------------
+    if text.lower() in ["hi", "hello", "hey", "menu", "start"]:
         send_message(
             sender,
-            "👋 Hello! I am your *Official LPU Assistant Bot*.\n\n"
-            "Ask anything about:\n"
-            "• Attendance & SOA\n"
-            "• Hostel & residential rules\n"
-            "• Leave & gate pass\n"
-            "• CGPA, exams, reappear\n"
-            "• Security, parking, RFID\n"
-            "• Mess, timings, medical\n\n"
-            "How can I help you today? 😊"
+            "👋 Hello! I am your *LPU Assistant Bot*.\n"
+            "Ask anything about LPU rules, attendance, hostel, leave, security, parking, mess, RFID, RMS, etc.\n\n"
+            "You can also ask:\n• Time now\n• Weather city\n• Weather at LPU\n"
         )
         return {"status": "ok"}
 
-    # Quick rule-based reply
-    qr = quick_reply(text)
-    if qr:
-        send_message(sender, qr)
+    # ---------------------------------------------------------
+    # LIVE TIME
+    # ---------------------------------------------------------
+    if text.lower() in ["time", "time now", "what is the time"]:
+        now = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
+        send_message(sender, f"⏰ Current time: {now.strftime('%I:%M %p')}")
         return {"status": "ok"}
 
-    # Weather (generic)
-    if "weather" in text.lower():
-        city = (
-            text.lower()
-            .replace("weather", "")
-            .replace("in", "")
-            .replace("at", "")
-            .strip()
-        )
-        if city == "":
-            send_message(sender, "🌦 Example: weather delhi / weather mumbai / weather lpu")
+    # ---------------------------------------------------------
+    # LIVE WEATHER
+    # ---------------------------------------------------------
+    if "weather" in text.lower() or "climate" in text.lower():
+        if "lpu" in text.lower():
+            corrected = correct_city_name("phagwara")
+            send_message(sender, get_weather(corrected))
             return {"status": "ok"}
 
-        corrected = correct_city(city)
+        cleaned = text.lower().replace("weather", "").replace("in", "").replace("at", "").strip()
+        corrected = correct_city_name(cleaned)
         if not corrected:
-            send_message(sender, "⚠️ City not recognized. Try another city.")
+            send_message(sender, "⚠️ City not recognized.")
             return {"status": "ok"}
 
         send_message(sender, get_weather(corrected))
         return {"status": "ok"}
 
-    # AI fallback
-    reply = ai_answer(text)
+    # ---------------------------------------------------------
+    # RULE BASED SYSTEM
+    # ---------------------------------------------------------
+    rb = rule_based(text)
+
+    # Must answer from data files
+    if rb is None:
+        ans = find_answer_in_sections(text)
+        if ans:
+            send_message(sender, ans)
+            return {"status": "ok"}
+
+        # If nothing found even in data → fallback AI
+        reply = ai_reply(text)
+        send_message(sender, reply)
+        return {"status": "ok"}
+
+    # Direct reply (e.g., creator)
+    if rb != "AI":
+        send_message(sender, rb)
+        return {"status": "ok"}
+
+    # Non-LPU → AI mode
+    reply = ai_reply(text)
     send_message(sender, reply)
     return {"status": "ok"}
