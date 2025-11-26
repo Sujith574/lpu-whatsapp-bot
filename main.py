@@ -2,28 +2,38 @@ from fastapi import FastAPI, Request
 import requests
 import os
 import logging
+import datetime
+import pytz
+
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
+
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+OPENWEATHER_API_KEY = "c3802e9e6d0cabfd189dde96a6f58fae"
+
 CREATOR_MESSAGE = (
     "I was created and developed by the Founders of Dream Sphere, "
     "and I serve as the official AI Assistant for Lovely Professional University (LPU)."
 )
+
 def load_knowledge():
     try:
         with open("lpu_knowledge.txt", "r", encoding="utf-8") as f:
             return f.read()
     except:
         return "Knowledge base not found."
+
 LPU_DATA = load_knowledge()
+
 def rule_based(text):
     t = text.lower()
-    # CREATOR INFORMATION OVERRIDE
     if (
         "who built you" in t or
         "who created you" in t or
@@ -36,7 +46,6 @@ def rule_based(text):
         "who are your founders" in t
     ):
         return CREATOR_MESSAGE
-    # Quick LPU Answers
     rules = {
         "attendance": "Minimum 75% attendance required. Below that is SOA (Shortage of Attendance).",
         "soa": "SOA = Shortage of Attendance (below 75%).",
@@ -57,6 +66,7 @@ def rule_based(text):
         if key in t:
             return rules[key]
     return None
+
 def ai_reply(user_message):
     if not GROQ_API_KEY:
         return "AI backend is not configured."
@@ -66,11 +76,10 @@ def ai_reply(user_message):
     }
     system_prompt = (
         "You are the official AI Assistant for Lovely Professional University (LPU).\n"
-        "You must use the LPU Knowledge Base below to answer questions accurately.\n\n"
+        "Use the LPU Knowledge Base to answer accurately.\n\n"
         "IMPORTANT RULE:\n"
-        f"Whenever someone asks who created you, who developed you, who built you, or who your founders are, "
-        f"you MUST ALWAYS answer exactly this: '{CREATOR_MESSAGE}'.\n"
-        "Never say LPU created you. LPU uses you, but Dream Sphere built you.\n\n"
+        f"If anyone asks who built you or developed you, always answer: '{CREATOR_MESSAGE}'.\n"
+        "Never say LPU created you.\n\n"
         f"LPU KNOWLEDGE BASE:\n{LPU_DATA}\n\n"
     )
     payload = {
@@ -91,7 +100,6 @@ def ai_reply(user_message):
             return f"Groq Error: {data['error'].get('message', 'Unknown error')}"
         else:
             return "Unexpected AI response."
-        # FINAL SAFETY FILTER (AI CANNOT SAY LPU CREATED YOU)
         rl = reply.lower()
         if (
             ("created" in rl or "developed" in rl or "built" in rl or "founder" in rl)
@@ -102,6 +110,7 @@ def ai_reply(user_message):
     except Exception as e:
         logging.error(f"AI ERROR: {e}")
         return "AI is facing issues. Please try again later."
+
 def send_message(to, text):
     url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
     headers = {
@@ -117,12 +126,34 @@ def send_message(to, text):
         requests.post(url, json=payload, headers=headers)
     except Exception as e:
         logging.error(f"Send message error: {e}")
+
+def get_weather(city):
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric"
+        r = requests.get(url).json()
+        if r.get("cod") != 200:
+            return "❌ City not found. Please try another city."
+        temp = r["main"]["temp"]
+        feels = r["main"]["feels_like"]
+        humidity = r["main"]["humidity"]
+        desc = r["weather"][0]["description"].title()
+        return (
+            f"🌦 *Weather in {city.title()}*\n"
+            f"🌡 Temperature: {temp}°C\n"
+            f"🤗 Feels Like: {feels}°C\n"
+            f"💧 Humidity: {humidity}%\n"
+            f"🌥 Condition: {desc}"
+        )
+    except:
+        return "⚠️ Unable to fetch weather currently."
+
 @app.get("/webhook")
 async def verify(request: Request):
     params = dict(request.query_params)
     if params.get("hub.verify_token") == VERIFY_TOKEN:
         return int(params.get("hub.challenge"))
     return "Invalid verify token"
+
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
@@ -134,7 +165,7 @@ async def webhook(request: Request):
         text = message.get("text", {}).get("body", "")
     except:
         return {"status": "ignored"}
-    # Welcome Message
+
     if text.lower() in ["hi", "hello", "hey", "menu", "start"]:
         welcome = (
             "👋 Hello! I am your *LPU Assistant Bot*.\n\n"
@@ -151,11 +182,30 @@ async def webhook(request: Request):
         )
         send_message(sender, welcome)
         return {"status": "ok"}
-    # Rule-based quick reply
+
+    if text.lower() in ["time", "time now", "current time", "what is the time"]:
+        india = pytz.timezone("Asia/Kolkata")
+        now = datetime.datetime.now(india)
+        current_time = now.strftime("%I:%M %p")
+        send_message(sender, f"⏰ Current time: {current_time}")
+        return {"status": "ok"}
+
+    if "weather" in text.lower():
+        parts = text.lower().split("weather")
+        if len(parts) > 1 and parts[1].strip() != "":
+            city = parts[1].strip()
+        else:
+            send_message(sender, "🌍 Please type like:\nweather delhi\nweather mumbai\nweather hyderabad")
+            return {"status": "ok"}
+        weather_report = get_weather(city)
+        send_message(sender, weather_report)
+        return {"status": "ok"}
+
     rb = rule_based(text)
     if rb:
         send_message(sender, rb)
         return {"status": "ok"}
+
     reply = ai_reply(text)
     send_message(sender, reply)
     return {"status": "ok"}
