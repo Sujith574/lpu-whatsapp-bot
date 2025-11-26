@@ -1,0 +1,65 @@
+LPU SECURITY & ENTRY/EXIT — SUMMARY
+
+MAIN GATE 1-A
+- Location: On NH-1 (after Chaheru railway bridge coming from Delhi/Ludhiana).
+- 24×7 entry/exit for pedestrians and vehicles.
+- 11 electronic boom barriers for registered vehicles (RFID).
+- Reception center issues visitor passes (after approval).
+- Turnstile gates and security staff manage pedestrian entry.
+- Second turnstile near student parking for day scholars.
+
+MAIN GATE 1-B
+- Pedestrian gate; biometric authentication.
+- 24×7 pedestrian entry/exit.
+- Frisking room, CCTV, PA system, IP phones, security office.
+- Alternate vehicle gate for emergencies.
+- Dedicated turnstile room for hostel student leave check-in/out.
+
+VISITOR PASS MANAGEMENT
+- Types of visits: Scheduled (pre-approved) and Unscheduled.
+- Online Sponsored Parent Pass: Generated via UMS (Student / Staff / Faculty).
+- Manual visitor pass: Issued at reception for unscheduled visitors (one day only).
+- Visitor exit requires signatures and bar-code scan at gate.
+
+TURNSTILE GATES
+- Present at Main Gates, hostels, library, auditorium, staff residences.
+- Biometric/card scan mandatory.
+- Managed 24×7 by security staff; CCTV monitored.
+- Lost UID → temporary pass for 1 day; new UID issued from Block 3, Room 104.
+
+TRAFFIC & PARKING
+- Allowed: two-wheelers, four-wheelers.
+- Forbidden: open jeeps, vehicles with dark/black tinted glasses.
+- Speed limit: 30 km/hr.
+- Pedestrians must use paver footpaths and zebra crossings.
+- Day Parking: designated areas (P-1, P-27 etc.).
+- Hostel Parking: reserved (P-8, P-12, P-14, etc.).
+- Temporary parking: only with written approval.
+
+HOSTEL STUDENT VEHICLE GUIDELINES
+- Vehicles allowed after university hours; allocated parking near hostel.
+- Apply for RFID before bringing vehicle inside campus.
+- One RFID per vehicle; pasted on windshield.
+- Helmets mandatory for rider & pillion.
+- No triple riding or stunts; silencer noise must be within limits.
+- University not responsible for theft/damage.
+
+RFID & BOOM BARRIERS
+- RFID linked to RC, DL, insurance; used to auto-open boom barriers.
+- RFID issued from Division of Security & Safety (Block 29 Room 307).
+- Activation issues → Block 31 Room 104. Faulty RFID → Block 30 Room 303.
+- For lost RFID report immediately to security for deactivation.
+
+DOCUMENTS REQUIRED FOR RFID
+- Driving License (soft copy)
+- Vehicle RC (soft copy)
+- Insurance copy (soft copy)
+- Fee receipt (if applicable)
+
+FIRE & SAFETY CONTACTS
+- Fire & Safety Office: (use numbers from lpu_residential.txt or admin)
+- Fire tender: 7508183870
+
+IMPORTANT NOTE
+- All vehicles must carry Insurance, RC, DL, Pollution Certificate.
+- Violations → disciplinary actions and fines.
