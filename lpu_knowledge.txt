@@ -63,8 +63,10 @@ TRANSPORT:
 GRIEVANCE:
 - Students can submit grievances via:
   UMS → Student Services → Relationship Management System (RMS) → Grievance.
+- student having any issues regarding anything then he/she can log an complaint through rms. 
 
 PLACEMENTS:
 - Minimum CGPA requirement varies based on company.
 
 - Students must attend placement classes, pre-placement talks, and tests.
+
