@@ -2,41 +2,41 @@ from fastapi import FastAPI, Request
 import requests
 import os
 import logging
-
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
-
-# ------------------------------------------------------
-# ENV VARIABLES
-# ------------------------------------------------------
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
-
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-
-
-# ------------------------------------------------------
-# LOAD KNOWLEDGE BASE FILE
-# ------------------------------------------------------
+CREATOR_MESSAGE = (
+    "I was created and developed by the Founders of Dream Sphere, "
+    "and I serve as the official AI Assistant for Lovely Professional University (LPU)."
+)
 def load_knowledge():
     try:
         with open("lpu_knowledge.txt", "r", encoding="utf-8") as f:
             return f.read()
     except:
         return "Knowledge base not found."
-
 LPU_DATA = load_knowledge()
-
-
-# ------------------------------------------------------
-# RULE-BASED REPLIES
-# ------------------------------------------------------
 def rule_based(text):
     t = text.lower()
-
+    # CREATOR INFORMATION OVERRIDE
+    if (
+        "who built you" in t or
+        "who created you" in t or
+        "who made you" in t or
+        "who developed you" in t or
+        "developer" in t or
+        "founder" in t or
+        "your creator" in t or
+        "your developer" in t or
+        "who are your founders" in t
+    ):
+        return CREATOR_MESSAGE
+    # Quick LPU Answers
     rules = {
         "attendance": "Minimum 75% attendance required. Below that is SOA (Shortage of Attendance).",
         "soa": "SOA = Shortage of Attendance (below 75%).",
@@ -53,33 +53,26 @@ def rule_based(text):
         "medical": "Visit University Hospital for medical attendance.",
         "grievance": "Submit grievance via UMS → RMS (Relationship Management System).",
     }
-
     for key in rules:
         if key in t:
             return rules[key]
-
     return None
-
-
-# ------------------------------------------------------
-# AI REPLY FUNCTION
-# ------------------------------------------------------
 def ai_reply(user_message):
     if not GROQ_API_KEY:
         return "AI backend is not configured."
-
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-
     system_prompt = (
         "You are the official AI Assistant for Lovely Professional University (LPU).\n"
-        "Use the following knowledge base to answer questions accurately.\n"
-        "If the user asks something outside the knowledge base, answer politely using general knowledge.\n\n"
+        "You must use the LPU Knowledge Base below to answer questions accurately.\n\n"
+        "IMPORTANT RULE:\n"
+        f"Whenever someone asks who created you, who developed you, who built you, or who your founders are, "
+        f"you MUST ALWAYS answer exactly this: '{CREATOR_MESSAGE}'.\n"
+        "Never say LPU created you. LPU uses you, but Dream Sphere built you.\n\n"
         f"LPU KNOWLEDGE BASE:\n{LPU_DATA}\n\n"
     )
-
     payload = {
         "model": GROQ_MODEL,
         "messages": [
@@ -88,76 +81,60 @@ def ai_reply(user_message):
         ],
         "temperature": 0.2
     }
-
     try:
         response = requests.post(GROQ_URL, json=payload, headers=headers, timeout=20)
         data = response.json()
         logging.info(data)
-
         if "choices" in data:
-            return data["choices"][0]["message"]["content"]
-
-        if "error" in data:
+            reply = data["choices"][0]["message"]["content"]
+        elif "error" in data:
             return f"Groq Error: {data['error'].get('message', 'Unknown error')}"
-
-        return "Unexpected AI response."
-
+        else:
+            return "Unexpected AI response."
+        # FINAL SAFETY FILTER (AI CANNOT SAY LPU CREATED YOU)
+        rl = reply.lower()
+        if (
+            ("created" in rl or "developed" in rl or "built" in rl or "founder" in rl)
+            and ("lpu" in rl or "university" in rl or "official" in rl)
+        ):
+            reply = CREATOR_MESSAGE
+        return reply
     except Exception as e:
         logging.error(f"AI ERROR: {e}")
         return "AI is facing issues. Please try again later."
-
-
-# ------------------------------------------------------
-# SEND MESSAGE TO WHATSAPP
-# ------------------------------------------------------
 def send_message(to, text):
     url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
-
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "text": {"body": text}
     }
-
     try:
         requests.post(url, json=payload, headers=headers)
     except Exception as e:
         logging.error(f"Send message error: {e}")
-
-
-# ------------------------------------------------------
-# WEBHOOK VERIFICATION
-# ------------------------------------------------------
 @app.get("/webhook")
 async def verify(request: Request):
     params = dict(request.query_params)
     if params.get("hub.verify_token") == VERIFY_TOKEN:
         return int(params.get("hub.challenge"))
     return "Invalid verify token"
-
-
-# ------------------------------------------------------
-# RECEIVE MESSAGE
-# ------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
     logging.info(data)
-
     try:
         entry = data["entry"][0]
         message = entry["changes"][0]["value"].get("messages", [])[0]
         sender = message["from"]
         text = message.get("text", {}).get("body", "")
-
     except:
         return {"status": "ignored"}
-
-    # WELCOME MESSAGE
+    # Welcome Message
     if text.lower() in ["hi", "hello", "hey", "menu", "start"]:
         welcome = (
             "👋 Hello! I am your *LPU Assistant Bot*.\n\n"
@@ -174,15 +151,11 @@ async def webhook(request: Request):
         )
         send_message(sender, welcome)
         return {"status": "ok"}
-
-    # RULE-BASED REPLY
+    # Rule-based quick reply
     rb = rule_based(text)
     if rb:
         send_message(sender, rb)
         return {"status": "ok"}
-
-    # AI FALLBACK
     reply = ai_reply(text)
     send_message(sender, reply)
-
     return {"status": "ok"}
