@@ -4,7 +4,6 @@ import os
 import logging
 import datetime
 import pytz
-from fuzzywuzzy import process
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
@@ -24,23 +23,19 @@ CREATOR_MESSAGE = (
     "and I serve as the official AI Assistant for Lovely Professional University (LPU)."
 )
 
-CITIES = [
-    "delhi", "mumbai", "hyderabad", "chennai", "kolkata", "bangalore",
-    "pune", "ahmedabad", "jaipur", "lucknow", "visakhapatnam", "vijayawada",
-    "kochi", "nagpur", "surat", "patna", "bhopal", "chandigarh", "indore",
-    "gurgaon", "noida", "trivandrum", "madurai", "coimbatore", "goa",
-    "mysore", "rajkot", "varanasi", "kanpur"
-]
-
 def correct_city_name(city):
-    best_match = process.extractOne(city, CITIES)
-    if best_match and best_match[1] > 60:
-        return best_match[0]
-    return None
+    try:
+        url = f"http://api.openweathermap.org/geo/1.0/direct?q={city}&limit=1&appid={OPENWEATHER_API_KEY}"
+        r = requests.get(url).json()
+        if not r:
+            return None
+        return r[0]["name"]
+    except:
+        return None
 
 def get_weather(city):
     try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric"
+        url = f"https://api.openweatherMap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric"
         r = requests.get(url).json()
         if r.get("cod") != 200:
             return "❌ City not found. Please try another city."
@@ -142,8 +137,7 @@ def ai_reply(user_message):
         ):
             reply = CREATOR_MESSAGE
         return reply
-    except Exception as e:
-        logging.error(f"AI ERROR: {e}")
+    except:
         return "AI is facing issues. Please try again later."
 
 def send_message(to, text):
@@ -206,10 +200,7 @@ async def webhook(request: Request):
         return {"status": "ok"}
 
     t = text.lower()
-    weather_keywords = [
-        "weather", "wether", "waether", "wheather",
-        "climate", "temp", "temprature", "temperature"
-    ]
+    weather_keywords = ["weather", "wether", "waether", "wheather", "climate", "temp", "temprature", "temperature"]
 
     if any(k in t for k in weather_keywords):
         clean = (
@@ -228,12 +219,12 @@ async def webhook(request: Request):
         )
 
         if clean == "":
-            send_message(sender, "🌍 Please type like:\nweather hyderabad\nweather mumbai\nweather delhi")
+            send_message(sender, "🌍 Please type like:\nweather hyderabad\nweather delhi\nweather london")
             return {"status": "ok"}
 
         corrected = correct_city_name(clean)
         if not corrected:
-            send_message(sender, "⚠️ City not recognized. Try full city name.")
+            send_message(sender, "⚠️ City not recognized. Try another city.")
             return {"status": "ok"}
 
         weather_report = get_weather(corrected)
