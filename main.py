@@ -4,6 +4,7 @@ import os
 import logging
 import datetime
 import pytz
+from fuzzywuzzy import process
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
@@ -22,6 +23,40 @@ CREATOR_MESSAGE = (
     "I was created and developed by the Founders of Dream Sphere, "
     "and I serve as the official AI Assistant for Lovely Professional University (LPU)."
 )
+
+CITIES = [
+    "delhi", "mumbai", "hyderabad", "chennai", "kolkata", "bangalore",
+    "pune", "ahmedabad", "jaipur", "lucknow", "visakhapatnam", "vijayawada",
+    "kochi", "nagpur", "surat", "patna", "bhopal", "chandigarh", "indore",
+    "gurgaon", "noida", "trivandrum", "madurai", "coimbatore", "goa",
+    "mysore", "rajkot", "varanasi", "kanpur"
+]
+
+def correct_city_name(city):
+    best_match = process.extractOne(city, CITIES)
+    if best_match and best_match[1] > 60:
+        return best_match[0]
+    return None
+
+def get_weather(city):
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric"
+        r = requests.get(url).json()
+        if r.get("cod") != 200:
+            return "❌ City not found. Please try another city."
+        temp = r["main"]["temp"]
+        feels = r["main"]["feels_like"]
+        humidity = r["main"]["humidity"]
+        desc = r["weather"][0]["description"].title()
+        return (
+            f"🌦 *Weather in {city.title()}*\n"
+            f"🌡 Temperature: {temp}°C\n"
+            f"🤗 Feels Like: {feels}°C\n"
+            f"💧 Humidity: {humidity}%\n"
+            f"🌥 Condition: {desc}"
+        )
+    except:
+        return "⚠️ Unable to fetch weather currently."
 
 def load_knowledge():
     try:
@@ -124,28 +159,8 @@ def send_message(to, text):
     }
     try:
         requests.post(url, json=payload, headers=headers)
-    except Exception as e:
-        logging.error(f"Send message error: {e}")
-
-def get_weather(city):
-    try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric"
-        r = requests.get(url).json()
-        if r.get("cod") != 200:
-            return "❌ City not found. Please try another city."
-        temp = r["main"]["temp"]
-        feels = r["main"]["feels_like"]
-        humidity = r["main"]["humidity"]
-        desc = r["weather"][0]["description"].title()
-        return (
-            f"🌦 *Weather in {city.title()}*\n"
-            f"🌡 Temperature: {temp}°C\n"
-            f"🤗 Feels Like: {feels}°C\n"
-            f"💧 Humidity: {humidity}%\n"
-            f"🌥 Condition: {desc}"
-        )
     except:
-        return "⚠️ Unable to fetch weather currently."
+        pass
 
 @app.get("/webhook")
 async def verify(request: Request):
@@ -190,14 +205,38 @@ async def webhook(request: Request):
         send_message(sender, f"⏰ Current time: {current_time}")
         return {"status": "ok"}
 
-    if "weather" in text.lower():
-        parts = text.lower().split("weather")
-        if len(parts) > 1 and parts[1].strip() != "":
-            city = parts[1].strip()
-        else:
-            send_message(sender, "🌍 Please type like:\nweather delhi\nweather mumbai\nweather hyderabad")
+    t = text.lower()
+    weather_keywords = [
+        "weather", "wether", "waether", "wheather",
+        "climate", "temp", "temprature", "temperature"
+    ]
+
+    if any(k in t for k in weather_keywords):
+        clean = (
+            t.replace("weather", "")
+             .replace("wether", "")
+             .replace("waether", "")
+             .replace("wheather", "")
+             .replace("climate", "")
+             .replace("temp", "")
+             .replace("temperature", "")
+             .replace("temprature", "")
+             .replace("in", "")
+             .replace("at", "")
+             .replace("of", "")
+             .strip()
+        )
+
+        if clean == "":
+            send_message(sender, "🌍 Please type like:\nweather hyderabad\nweather mumbai\nweather delhi")
             return {"status": "ok"}
-        weather_report = get_weather(city)
+
+        corrected = correct_city_name(clean)
+        if not corrected:
+            send_message(sender, "⚠️ City not recognized. Try full city name.")
+            return {"status": "ok"}
+
+        weather_report = get_weather(corrected)
         send_message(sender, weather_report)
         return {"status": "ok"}
 
