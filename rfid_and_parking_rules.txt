@@ -1,0 +1,228 @@
+LPU RFID, VEHICLE ENTRY, PARKING & TRAFFIC RULES
+(Official Security & Safety Guidelines – 2025–26)
+
+=====================================================
+1. OVERVIEW
+=====================================================
+LPU regulates entry of all vehicles using:
+• RFID-based boom barrier system
+• CCTV monitoring at all lanes
+• Automated entry/exit logs
+• Strict parking zones for students, staff, and visitors
+
+Vehicles without RFID are NOT allowed beyond Gate 1-A without special approval.
+
+=====================================================
+2. TYPES OF VEHICLES ALLOWED
+=====================================================
+✔ Allowed:
+• Two-wheelers (bike/scooter)
+• Four-wheelers (cars)
+• Official vehicles
+• Registered vendor vehicles
+
+❌ NOT ALLOWED:
+• Open Jeeps  
+• Vehicles with dark/black tinted glasses  
+• Modified exhaust vehicles (loud silencers)  
+• Unauthorized commercial vehicles  
+
+=====================================================
+3. RFID SYSTEM (Radio Frequency Identification)
+=====================================================
+RFID is mandatory for:
+• Hostel students (2W / 4W)
+• Day scholars (where applicable)
+• Staff & faculty vehicles
+• Vendors/contractors using regular entry
+
+RFID allows automatic entry/exit through boom barriers.
+
+=====================================================
+4. HOW TO APPLY FOR RFID
+=====================================================
+UMS Path:
+UMS → Division of Security & Safety → RFID → RFID Online Application Form
+
+You must upload:
+• Driving License (soft copy)
+• RC (Registration Certificate)
+• Vehicle Insurance
+• Fee receipt (if applicable)
+
+RFID is issued at:
+Block 29 → Room 307  
+(Security & Safety Division)
+
+=====================================================
+5. STUDENT RFID VALIDITY & RULES
+=====================================================
+• RFID for students is valid for ONE academic year  
+  (1st August – 31st May).  
+• Automatically deactivated on 31 May every year.  
+• Hostellers can apply for free/paid RFID as per policy.
+
+IMPORTANT:
+→ RFID MUST be pasted on the windshield  
+→ Holding RFID in hand = **disciplinary action**  
+→ RFID is linked to the STUDENT, not the vehicle user  
+
+No student can use another student’s RFID.
+
+=====================================================
+6. LOSS OR DAMAGE OF RFID
+=====================================================
+If RFID is lost/damaged:
+• Report immediately to Main Security Office  
+• Old RFID will be deactivated  
+• Apply for a new RFID  
+
+Faulty RFID repair:
+Block 30 → Room 303
+
+Activation/deactivation issues:
+Block 31 → Room 104
+
+=====================================================
+7. VEHICLE ENTRY PROCESS (Boom Barriers)
+=====================================================
+Boom Barriers are at Gate 1-A (11 lanes).  
+Functionality:
+• Automatically open when RFID is detected  
+• Lane cameras record vehicle number and entry time  
+• Visitor vehicles are manually approved by guard
+
+Students must:
+• Slow down  
+• Keep RFID clearly visible  
+• Avoid tailgating another vehicle  
+
+=====================================================
+8. SPEED LIMITS & TRAFFIC RULES
+=====================================================
+Speed Limit INSIDE Campus → **30 km/hr**
+
+STRICTLY PROHIBITED:
+❌ Driving without helmet (rider + pillion)  
+❌ Triple riding  
+❌ Stunt riding  
+❌ Honking unnecessarily  
+❌ Riding in reverse direction  
+❌ Using headphones/earphones while driving  
+
+Morning One-Way Rule:
+• From 8:40 AM – 9:00 AM all internal roads become ONE-WAY for incoming traffic.
+
+=====================================================
+9. PARKING AREAS
+=====================================================
+Parking is allowed ONLY in designated zones.
+
+-------------------------------------------
+A) DAY SCHOLAR PARKING (7 AM – 7 PM)
+-------------------------------------------
+1. Parking P–1 → Main Gate 1-A  
+   For: Students with classes in Blocks 1–39  
+   Vehicle: 2W/4W  
+
+2. Parking P–27 → Southern Gate  
+   For: Blocks 55–58 students  
+   Note: Vehicles can be taken out **after 11 AM only**
+
+-------------------------------------------
+B) HOSTEL PARKING (24×7)
+-------------------------------------------
+1. GH/BH specific parking zones  
+2. Students must park ONLY in their hostel’s allotted area  
+3. First row in some areas reserved for:
+   • Security officials  
+   • Executive Deans  
+   • Visitors  
+
+-------------------------------------------
+C) TEMPORARY PARKING
+-------------------------------------------
+Issued for:
+• Medical conditions  
+• Short-term parking near academic blocks  
+Permission needed from **Main Security Office**
+
+=====================================================
+10. HOSTEL STUDENT VEHICLE RULES
+=====================================================
+Hostellers can use vehicles **only after university hours**.
+
+Allowed vehicle usage:
+✔ 5 PM – 8 PM  
+✔ On holidays/Sundays → 7 AM – 7 PM  
+
+NOT ALLOWED:
+❌ Using vehicle during class hours  
+❌ Using another student’s vehicle  
+❌ Driving without helmet  
+❌ Using open jeeps or cars with dark glasses  
+
+Hostellers MUST apply for RFID before bringing vehicle inside.
+
+=====================================================
+11. PARKING AT OWNER’S RISK
+=====================================================
+University is NOT responsible for:
+• Theft  
+• Loss  
+• Damage  
+• Accessories loss  
+
+Owners must lock vehicles properly.
+
+=====================================================
+12. DOCUMENTS CHECKED OFTEN BY SECURITY
+=====================================================
+Students must carry:
+• RFID  
+• Driving License  
+• RC  
+• Insurance  
+• Pollution Certificate  
+
+Failure = fine + disciplinary action.
+
+=====================================================
+13. COMMON BOT ANSWERS THIS FILE ENABLES
+=====================================================
+✔ “How to apply for RFID?”  
+→ UMS → Security & Safety → RFID Online Application.
+
+✔ “Where to collect RFID?”  
+→ Block 29–307.
+
+✔ “Can I drive bike at night?”  
+→ Only 5–8 PM. Sundays/holidays 7 AM–7 PM.
+
+✔ “Speed limit in campus?”  
+→ 30 km/hr.
+
+✔ “Can I bring car with black glass?”  
+→ No. Black/tinted glass cars are banned.
+
+✔ “Where do day scholars park?”  
+→ P–1 or P–27 depending on block.
+
+✔ “What if RFID stops working?”  
+→ Block 30–303.
+
+✔ “Are helmets compulsory?”  
+→ YES for rider + pillion.
+
+✔ “Can parents park inside hostel?”  
+→ Yes, in their designated parent parking zones.
+
+=====================================================
+14. QUICK BOT REPLY TEMPLATES
+=====================================================
+• “RFID is mandatory for vehicle entry through boom barriers.”  
+• “Hostellers can use vehicles only from 5–8 PM.”  
+• “Speed limit inside campus is 30 km/hr.”  
+• “Parking only in designated zones. Else fine + action.”  
+• “RFID must be pasted on windshield — not held in hand.”  
+• “Open jeeps and dark glass cars are NOT allowed.”
