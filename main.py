@@ -14,17 +14,17 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+OPENWEATHER_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 CREATOR_MESSAGE = "I was specially designed only for Lovely Professional University (LPU). Developed by Vennela Barnana."
-NON_LPU_REPLY = "I can answer only educational or LPU-related questions."
+NON_LPU_REPLY = "I can answer only LPU or educational questions."
 
 DATA_FILE = "data.txt"
 
 # ---------------- LOAD DATA ----------------
 def load_data():
     if not os.path.exists(DATA_FILE):
-        logging.warning("data.txt missing!")
         return {}
 
     with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -55,8 +55,6 @@ def load_data():
 SECTIONS = load_data()
 
 # ---------------- WEATHER ----------------
-OPENWEATHER_KEY = os.getenv("OPENWEATHER_API_KEY", "c3802e9e6d0cabfd189dde96a6f58fae")
-
 def get_weather(city):
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_KEY}&units=metric"
@@ -68,11 +66,11 @@ def get_weather(city):
         feels = r["main"]["feels_like"]
         desc = r["weather"][0]["description"].title()
 
-        return f"Weather in {city.title()}:\nTemp: {temp}°C\nFeels Like: {feels}°C\nCondition: {desc}"
+        return f"{city.title()} Weather:\nTemp: {temp}°C\nFeels: {feels}°C\n{desc}"
     except:
         return "Weather service unavailable."
 
-# ---------------- SEARCH ENGINE ----------------
+# ---------------- KEYWORD MAP ----------------
 keyword_map = {
     "attendance": "attendance_rules",
     "leave": "hostel_leave_rules",
@@ -100,7 +98,7 @@ def find_section(text):
 # ---------------- EDUCATIONAL CHECK ----------------
 edu_words = [
     "attendance","exam","hostel","leave","cgpa","ums","rms","semester","course",
-    "mess","warden","wifi","security","placement","library","medical","rfid"
+    "mess","warden","wifi","security","placement","library","medical","rfid","lpu"
 ]
 
 def is_edu(text):
@@ -119,7 +117,7 @@ def ai_fallback(text):
     payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {"role": "system", "content": "Give short, clear replies for LPU educational questions."},
+            {"role": "system", "content": "Give short, clear LPU-only answers."},
             {"role": "user", "content": text}
         ]
     }
@@ -134,8 +132,11 @@ def ai_fallback(text):
 def send_message(to, body):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
-    payload = {"messaging_product": "whatsapp", "to": to, "text": {"body": body}}
-
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "text": {"body": body}
+    }
     try:
         requests.post(url, json=payload)
     except:
@@ -166,10 +167,11 @@ async def webhook(request: Request):
 
     # Greetings
     if t in ["hi", "hello", "hey", "menu"]:
-        send_message(sender, "Hello! Ask me anything about LPU.\n\nFor developer: type *developer*.")
+        send_message(sender, "Hello! Ask me anything about LPU.\nType *developer* for creator info.")
         return {"status": "ok"}
 
-    if "developer" in t or "who created" in t:
+    # Developer
+    if "developer" in t:
         send_message(sender, CREATOR_MESSAGE)
         return {"status": "ok"}
 
@@ -185,17 +187,17 @@ async def webhook(request: Request):
         send_message(sender, get_weather(city))
         return {"status": "ok"}
 
-    # Rule-based LPU answer
+    # Rule-based section
     section = find_section(text)
     if section:
         send_message(sender, section)
         return {"status": "ok"}
 
-    # AI fallback (educational only)
-    if "lpu" in t or is_edu(text):
+    # AI fallback (LPU only)
+    if is_edu(text):
         send_message(sender, ai_fallback(text))
         return {"status": "ok"}
 
-    # Block everything else
+    # Non-LPU blocked
     send_message(sender, NON_LPU_REPLY)
     return {"status": "ok"}
