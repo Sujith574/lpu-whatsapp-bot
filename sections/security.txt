@@ -1,1 +1,19 @@
+SECURITY RULES (2025–26)
+==============================
 
+RFID ENTRY:
+• Students must carry ID card at all times.
+
+GATE ENTRY:
+• Biometric verification mandatory.
+• Random checks possible.
+
+VEHICLES:
+• Only registered vehicles allowed.
+• Speed limit: 30 km/hr.
+
+CCTV:
+• Campus under 24×7 surveillance.
+
+REPORT ISSUES:
+• Lost ID, safety concerns, theft → Report instantly via RMS (Security Category).
