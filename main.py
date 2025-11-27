@@ -17,14 +17,16 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 OPENWEATHER_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-CREATOR_MESSAGE = "I was specially designed only for Lovely Professional University (LPU). Developed by Vennela Barnana."
-NON_LPU_REPLY = "I can answer only LPU or educational questions."
+CREATOR_MESSAGE = "I was created specially for Lovely Professional University (LPU). Developed by Vennela Barnana."
+NON_LPU_REPLY = "I can answer only educational or LPU-related questions."
 
 DATA_FILE = "data.txt"
+
 
 # ---------------- LOAD DATA ----------------
 def load_data():
     if not os.path.exists(DATA_FILE):
+        logging.warning("data.txt missing!")
         return {}
 
     with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -39,7 +41,7 @@ def load_data():
 
     for line in lines:
         stripped = line.strip()
-        if section_pattern.match(stripped):
+        if section_pattern.match(stripped):  # New section
             if buffer:
                 sections[key] = "\n".join(buffer).strip()
             key = stripped.lower().replace(" ", "_")
@@ -52,13 +54,16 @@ def load_data():
 
     return sections
 
+
 SECTIONS = load_data()
+
 
 # ---------------- WEATHER ----------------
 def get_weather(city):
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_KEY}&units=metric"
         r = requests.get(url).json()
+
         if r.get("cod") != 200:
             return "City not found."
 
@@ -70,7 +75,8 @@ def get_weather(city):
     except:
         return "Weather service unavailable."
 
-# ---------------- KEYWORD MAP ----------------
+
+# ---------------- SEARCH ENGINE ----------------
 keyword_map = {
     "attendance": "attendance_rules",
     "leave": "hostel_leave_rules",
@@ -95,15 +101,18 @@ def find_section(text):
             return SECTIONS[key]
     return None
 
+
 # ---------------- EDUCATIONAL CHECK ----------------
 edu_words = [
-    "attendance","exam","hostel","leave","cgpa","ums","rms","semester","course",
-    "mess","warden","wifi","security","placement","library","medical","rfid","lpu"
+    "attendance", "exam", "hostel", "leave", "cgpa", "ums", "rms", "semester",
+    "course", "mess", "warden", "wifi", "security", "placement",
+    "library", "medical", "rfid"
 ]
 
 def is_edu(text):
     t = text.lower()
     return any(x in t for x in edu_words)
+
 
 # ---------------- AI FALLBACK ----------------
 def ai_fallback(text):
@@ -113,34 +122,51 @@ def ai_fallback(text):
     if not is_edu(text):
         return NON_LPU_REPLY
 
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
     payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {"role": "system", "content": "Give short, clear LPU-only answers."},
+            {"role": "system", "content": "Give short and clear replies for LPU educational questions."},
             {"role": "user", "content": text}
         ]
     }
 
     try:
-        r = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers).json()
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            json=payload,
+            headers=headers
+        ).json()
+
         return r["choices"][0]["message"]["content"]
-    except:
+
+    except Exception as e:
+        logging.error(e)
         return "AI service unavailable."
+
 
 # ---------------- SEND MESSAGE ----------------
 def send_message(to, body):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json"
+    }
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "text": {"body": body}
     }
+
     try:
         requests.post(url, json=payload)
     except:
         pass
+
 
 # ---------------- VERIFY WEBHOOK ----------------
 @app.get("/webhook")
@@ -149,6 +175,7 @@ async def verify(request: Request):
     if params.get("hub.verify_token") == VERIFY_TOKEN:
         return int(params.get("hub.challenge"))
     return "Invalid token"
+
 
 # ---------------- MAIN WEBHOOK ----------------
 @app.post("/webhook")
@@ -167,10 +194,9 @@ async def webhook(request: Request):
 
     # Greetings
     if t in ["hi", "hello", "hey", "menu"]:
-        send_message(sender, "Hello! Ask me anything about LPU.\nType *developer* for creator info.")
+        send_message(sender, "Hello! Ask me anything about LPU.\nType *developer* to know my creator.")
         return {"status": "ok"}
 
-    # Developer
     if "developer" in t:
         send_message(sender, CREATOR_MESSAGE)
         return {"status": "ok"}
@@ -178,7 +204,7 @@ async def webhook(request: Request):
     # Time
     if t in ["time", "current time", "time now"]:
         now = datetime.datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%I:%M %p")
-        send_message(sender, f"Current time: {now}")
+        send_message(sender, f"Time: {now}")
         return {"status": "ok"}
 
     # Weather
@@ -193,11 +219,11 @@ async def webhook(request: Request):
         send_message(sender, section)
         return {"status": "ok"}
 
-    # AI fallback (LPU only)
-    if is_edu(text):
+    # AI fallback (ONLY education or LPU)
+    if "lpu" in t or is_edu(text):
         send_message(sender, ai_fallback(text))
         return {"status": "ok"}
 
-    # Non-LPU blocked
+    # Block everything else
     send_message(sender, NON_LPU_REPLY)
     return {"status": "ok"}
