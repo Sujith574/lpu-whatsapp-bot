@@ -1,1 +1,6 @@
-
+Cloak Room:
+• Used to store luggage during vacations.
+• Items allowed: 1 blanket, 1 bucket, 1 mug, 2 bags.
+• OTP-based deposit & return.
+• Collect within 3 days of session start.
+• Fine ₹100/day after due date.
