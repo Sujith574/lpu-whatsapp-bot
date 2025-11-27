@@ -9,55 +9,20 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ENV
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "lpu_token_123")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = "llama-3.1-8b-instant"
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "c3802e9e6d0cabfd189dde96a6f58fae")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-# Creator Message
-CREATOR_MESSAGE = "I was developed for Lovely Professional University (LPU) and created by Vennela Barnana."
+# Creator message
+CREATOR_MESSAGE = (
+    "I was specially designed for Lovely Professional University. "
+    "I was developed by Vennela Barnana."
+)
 
-# ---------------- WEATHER HELPERS ----------------
-def correct_city_name(city):
-    if "lpu" in city or "phagwara" in city:
-        return "Phagwara"
-    try:
-        url = f"http://api.openweathermap.org/geo/1.0/direct?q={city}&limit=1&appid={OPENWEATHER_API_KEY}"
-        r = requests.get(url).json()
-        if not r:
-            return None
-        return r[0]["name"]
-    except:
-        return None
-
-
-def get_weather(city):
-    try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric"
-        r = requests.get(url).json()
-
-        if r.get("cod") != 200:
-            return "❌ City not found. Try again."
-
-        temp = r["main"]["temp"]
-        feels = r["main"]["feels_like"]
-        humidity = r["main"]["humidity"]
-        desc = r["weather"][0]["description"].title()
-
-        return (
-            f"🌦 *Weather in {city.title()}*\n"
-            f"🌡 Temperature: {temp}°C\n"
-            f"🤗 Feels Like: {feels}°C\n"
-            f"💧 Humidity: {humidity}%\n"
-            f"🌥 Condition: {desc}"
-        )
-    except:
-        return "⚠️ Unable to fetch weather."
-
-
-# ---------------- LOAD ALL TEXT FILES ----------------
+# ---------------- LOAD SECTIONS ----------------
 def load_sections():
     folder = "sections"
     data = {}
@@ -83,89 +48,77 @@ SECTIONS = load_sections()
 def find_lpu_answer(text):
     t = text.lower()
 
-    # Direct creator check
-    creator_words = ["who created", "who built", "who made", "developer", "founder"]
-    if any(x in t for x in creator_words):
+    # Creator
+    if "who created" in t or "who developed" in t or "developer" in t or "founder" in t:
         return CREATOR_MESSAGE
 
-    # Special high-priority detection
-    if any(x in t for x in ["60", "low attendance", "below 75", "my attendance"]):
-        return SECTIONS.get("attendance", "")
-
-    if "leave" in t and any(x in t for x in ["denied", "problem", "issue"]):
-        return SECTIONS.get("hostel_leave_rules", "")
-
-    if "visitor" in t or "parent pass" in t:
-        return SECTIONS.get("visitor_rules", "")
-
-    if "rfid" in t or "id card" in t or "lost card" in t:
-        return SECTIONS.get("id_card", "")
-
-    if "mess" in t or "food" in t:
-        return SECTIONS.get("mess_rules", "")
-
-    # Match based on filename keywords
-    for key, content in SECTIONS.items():
-        if key.replace("_", " ") in t:
-            return content
-
-    # Fuzzy keyword match
-    keywords = {
+    # High priority rules
+    keyword_map = {
         "attendance": "attendance",
+        "cgpa": "cgpa",
+        "mess": "mess_rules",
+        "hostel": "hostel_rules",
         "leave": "hostel_leave_rules",
         "visitor": "visitor_rules",
         "parking": "parking",
         "rfid": "rfid_and_parking_rules",
-        "mess": "mess_rules",
-        "hostel": "hostel_rules",
-        "timing": "hostel_timings",
-        "library": "library",
-        "discipline": "discipline",
+        "wifi": "wifi_network",
         "exam": "exam_rules",
         "reappear": "exam_reappear",
+        "library": "library",
         "medical": "medical",
-        "transport": "transport",
-        "wifi": "wifi_network",
-        "security": "security",
-        "safety": "security_and_safety",
-        "rms": "rm_system"
+        "security": "security_and_safety",
+        "rm system": "rm_system"
     }
 
-    for word, section in keywords.items():
+    for word, section in keyword_map.items():
         if word in t and section in SECTIONS:
             return SECTIONS[section]
 
-    return None  # means "not an LPU question"
+    # Filename-based match
+    for key, content in SECTIONS.items():
+        if key.replace("_", " ") in t:
+            return content
+
+    return None
 
 
-# ---------------- AI FALLBACK ----------------
-def ai_fallback(text):
-    if not GROQ_API_KEY:
-        return "AI backend offline."
+# ---------------- EDUCATIONAL DETECTOR ----------------
+def is_educational(text):
+    words = ["study", "learn", "what is", "define", "explain", "science", "python",
+             "java", "maths", "history", "biology", "chemistry", "engineering",
+             "project", "exam", "assignment", "education", "college"]
+    return any(w in text.lower() for w in words)
 
+
+# ---------------- AI HANDLER ----------------
+def ai_answer(text):
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+
     payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {"role": "system", "content": "Answer briefly. If the question is about LPU, reply: 'Please ask LPU-related questions only.'"},
+            {"role": "system", "content": "Answer educational questions briefly and clearly."},
             {"role": "user", "content": text}
         ],
         "temperature": 0.2
     }
 
     try:
-        r = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers).json()
+        r = requests.post("https://api.groq.com/openai/v1/chat/completions",
+                          json=payload, headers=headers).json()
         return r["choices"][0]["message"]["content"]
     except:
-        return "AI is unavailable."
+        return "AI is unavailable at the moment."
 
 
 # ---------------- SEND MESSAGE ----------------
 def send_message(to, body):
-    url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
-    payload = {"messaging_product": "whatsapp", "to": to, "text": {"body": body}}
+    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
+    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}",
+               "Content-Type": "application/json"}
 
+    payload = {"messaging_product": "whatsapp", "to": to, "text": {"body": body}}
     try:
         requests.post(url, json=payload)
     except:
@@ -194,47 +147,34 @@ async def webhook(request: Request):
     except:
         return {"status": "ignored"}
 
-    lower = text.lower()
+    low = text.lower()
 
-    # Greeting
-    if lower in ["hi", "hello", "hey", "start", "menu"]:
+    # Greetings
+    if low in ["hi", "hello", "hey", "start", "menu"]:
         send_message(sender,
-            "👋 Hello! I am your *Official LPU Assistant Bot*.\n\n"
-            "Ask me anything about:\n"
-            "• Attendance & SOA\n"
-            "• Hostel rules\n"
-            "• Leave rules\n"
-            "• RFID / Visitor Pass\n"
-            "• Mess, Hostel, Security\n"
-            "• CGPA, Exams, Reappear\n\n"
-            "How can I help you?"
-        )
+                     "👋 Hello! I am the official *LPU Assistant Bot*.\n"
+                     "I was specially designed only for Lovely Professional University.\n\n"
+                     "Ask me anything related to:\n"
+                     "• Attendance\n"
+                     "• Hostel & Mess\n"
+                     "• Exams & CGPA\n"
+                     "• Visitor pass / RFID / Security\n"
+                     "• Fees / Placements / Transport\n\n"
+                     "I can also answer *educational questions*. 🚀")
         return {"status": "ok"}
 
-    # Time
-    if lower in ["time", "current time", "time now"]:
-        now = datetime.datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%I:%M %p")
-        send_message(sender, f"⏰ Current time: {now}")
+    # LPU rule-based
+    ans = find_lpu_answer(low)
+    if ans:
+        send_message(sender, ans)
         return {"status": "ok"}
 
-    # Weather
-    if "weather" in lower or "temperature" in lower or "climate" in lower:
-        city = lower.replace("weather", "").replace("temperature", "").replace("climate", "").strip()
-        if city == "" or "lpu" in city:
-            city = "Phagwara"
-        corrected = correct_city_name(city)
-        if not corrected:
-            send_message(sender, "City not recognized.")
-        else:
-            send_message(sender, get_weather(corrected))
+    # Educational Q
+    if is_educational(text):
+        send_message(sender, ai_answer(text))
         return {"status": "ok"}
 
-    # Rule-based LPU reply
-    rule_ans = find_lpu_answer(lower)
-    if rule_ans:
-        send_message(sender, rule_ans)
-        return {"status": "ok"}
-
-    # AI fallback (non-LPU questions)
-    send_message(sender, ai_fallback(text))
+    # Reject Non-LPU + Non-Educational
+    send_message(sender,
+                 "I can answer only educational or LPU-related questions.")
     return {"status": "ok"}
