@@ -4,135 +4,150 @@ import os
 import logging
 import datetime
 import pytz
+import re
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
-# ENV
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "lpu_token_123")
+# ---------------- ENV ----------------
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = "llama-3.1-8b-instant"
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-# Creator message
-CREATOR_MESSAGE = (
-    "I was specially designed for Lovely Professional University. "
-    "I was developed by Vennela Barnana."
-)
+CREATOR_MESSAGE = "I was specially designed only for Lovely Professional University (LPU). Developed by Vennela Barnana."
+NON_LPU_REPLY = "I can answer only educational or LPU-related questions."
 
-# ---------------- LOAD SECTIONS ----------------
-def load_sections():
-    folder = "sections"
-    data = {}
+DATA_FILE = "data.txt"
 
-    if not os.path.exists(folder):
-        return data
+# ---------------- LOAD DATA ----------------
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        logging.warning("data.txt missing!")
+        return {}
 
-    for f in os.listdir(folder):
-        if f.endswith(".txt"):
-            try:
-                with open(os.path.join(folder, f), "r", encoding="utf-8") as file:
-                    key = f.replace(".txt", "")
-                    data[key] = file.read().strip()
-            except:
-                continue
-    return data
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        text = f.read()
 
+    lines = text.splitlines()
+    section_pattern = re.compile(r"^[A-Z0-9 \\-]{3,80}$")
 
-SECTIONS = load_sections()
+    sections = {}
+    key = "general"
+    buffer = []
 
+    for line in lines:
+        stripped = line.strip()
+        if section_pattern.match(stripped):
+            if buffer:
+                sections[key] = "\n".join(buffer).strip()
+            key = stripped.lower().replace(" ", "_")
+            buffer = []
+        else:
+            buffer.append(line)
 
-# ---------------- RULE-BASED LPU DETECTION ----------------
-def find_lpu_answer(text):
+    if buffer:
+        sections[key] = "\n".join(buffer).strip()
+
+    return sections
+
+SECTIONS = load_data()
+
+# ---------------- WEATHER ----------------
+OPENWEATHER_KEY = os.getenv("OPENWEATHER_API_KEY", "c3802e9e6d0cabfd189dde96a6f58fae")
+
+def get_weather(city):
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_KEY}&units=metric"
+        r = requests.get(url).json()
+        if r.get("cod") != 200:
+            return "City not found."
+
+        temp = r["main"]["temp"]
+        feels = r["main"]["feels_like"]
+        desc = r["weather"][0]["description"].title()
+
+        return f"Weather in {city.title()}:\nTemp: {temp}°C\nFeels Like: {feels}°C\nCondition: {desc}"
+    except:
+        return "Weather service unavailable."
+
+# ---------------- SEARCH ENGINE ----------------
+keyword_map = {
+    "attendance": "attendance_rules",
+    "leave": "hostel_leave_rules",
+    "hostel": "hostel_rules",
+    "mess": "mess_rules",
+    "exam": "exam_rules",
+    "id card": "id_card_rules",
+    "rfid": "rfid_traffic_rules",
+    "medical": "medical_rules",
+    "security": "security_safety_rules",
+    "wifi": "wifi_internet_rules",
+    "library": "library_rules",
+    "rms": "rms_system",
+    "placement": "placement_rules",
+    "parking": "parking_rules"
+}
+
+def find_section(text):
     t = text.lower()
-
-    # Creator
-    if "who created" in t or "who developed" in t or "developer" in t or "founder" in t:
-        return CREATOR_MESSAGE
-
-    # High priority rules
-    keyword_map = {
-        "attendance": "attendance",
-        "cgpa": "cgpa",
-        "mess": "mess_rules",
-        "hostel": "hostel_rules",
-        "leave": "hostel_leave_rules",
-        "visitor": "visitor_rules",
-        "parking": "parking",
-        "rfid": "rfid_and_parking_rules",
-        "wifi": "wifi_network",
-        "exam": "exam_rules",
-        "reappear": "exam_reappear",
-        "library": "library",
-        "medical": "medical",
-        "security": "security_and_safety",
-        "rm system": "rm_system"
-    }
-
-    for word, section in keyword_map.items():
-        if word in t and section in SECTIONS:
-            return SECTIONS[section]
-
-    # Filename-based match
-    for key, content in SECTIONS.items():
-        if key.replace("_", " ") in t:
-            return content
-
+    for word, key in keyword_map.items():
+        if word in t and key in SECTIONS:
+            return SECTIONS[key]
     return None
 
+# ---------------- EDUCATIONAL CHECK ----------------
+edu_words = [
+    "attendance","exam","hostel","leave","cgpa","ums","rms","semester","course",
+    "mess","warden","wifi","security","placement","library","medical","rfid"
+]
 
-# ---------------- EDUCATIONAL DETECTOR ----------------
-def is_educational(text):
-    words = ["study", "learn", "what is", "define", "explain", "science", "python",
-             "java", "maths", "history", "biology", "chemistry", "engineering",
-             "project", "exam", "assignment", "education", "college"]
-    return any(w in text.lower() for w in words)
+def is_edu(text):
+    t = text.lower()
+    return any(x in t for x in edu_words)
 
+# ---------------- AI FALLBACK ----------------
+def ai_fallback(text):
+    if not GROQ_API_KEY:
+        return "AI backend offline."
 
-# ---------------- AI HANDLER ----------------
-def ai_answer(text):
+    if not is_edu(text):
+        return NON_LPU_REPLY
+
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-
     payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {"role": "system", "content": "Answer educational questions briefly and clearly."},
+            {"role": "system", "content": "Give short, clear replies for LPU educational questions."},
             {"role": "user", "content": text}
-        ],
-        "temperature": 0.2
+        ]
     }
 
     try:
-        r = requests.post("https://api.groq.com/openai/v1/chat/completions",
-                          json=payload, headers=headers).json()
+        r = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers).json()
         return r["choices"][0]["message"]["content"]
     except:
-        return "AI is unavailable at the moment."
-
+        return "AI service unavailable."
 
 # ---------------- SEND MESSAGE ----------------
 def send_message(to, body):
-    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}",
-               "Content-Type": "application/json"}
-
+    url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
+    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
     payload = {"messaging_product": "whatsapp", "to": to, "text": {"body": body}}
+
     try:
         requests.post(url, json=payload)
     except:
         pass
 
-
-# ---------------- WEBHOOK VERIFY ----------------
+# ---------------- VERIFY WEBHOOK ----------------
 @app.get("/webhook")
 async def verify(request: Request):
     params = dict(request.query_params)
     if params.get("hub.verify_token") == VERIFY_TOKEN:
         return int(params.get("hub.challenge"))
     return "Invalid token"
-
 
 # ---------------- MAIN WEBHOOK ----------------
 @app.post("/webhook")
@@ -147,34 +162,40 @@ async def webhook(request: Request):
     except:
         return {"status": "ignored"}
 
-    low = text.lower()
+    t = text.lower()
 
     # Greetings
-    if low in ["hi", "hello", "hey", "start", "menu"]:
-        send_message(sender,
-                     "👋 Hello! I am the official *LPU Assistant Bot*.\n"
-                     "I was specially designed only for Lovely Professional University.\n\n"
-                     "Ask me anything related to:\n"
-                     "• Attendance\n"
-                     "• Hostel & Mess\n"
-                     "• Exams & CGPA\n"
-                     "• Visitor pass / RFID / Security\n"
-                     "• Fees / Placements / Transport\n\n"
-                     "I can also answer *educational questions*. 🚀")
+    if t in ["hi", "hello", "hey", "menu"]:
+        send_message(sender, "Hello! Ask me anything about LPU.\n\nFor developer: type *developer*.")
         return {"status": "ok"}
 
-    # LPU rule-based
-    ans = find_lpu_answer(low)
-    if ans:
-        send_message(sender, ans)
+    if "developer" in t or "who created" in t:
+        send_message(sender, CREATOR_MESSAGE)
         return {"status": "ok"}
 
-    # Educational Q
-    if is_educational(text):
-        send_message(sender, ai_answer(text))
+    # Time
+    if t in ["time", "current time", "time now"]:
+        now = datetime.datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%I:%M %p")
+        send_message(sender, f"Current time: {now}")
         return {"status": "ok"}
 
-    # Reject Non-LPU + Non-Educational
-    send_message(sender,
-                 "I can answer only educational or LPU-related questions.")
+    # Weather
+    if "weather" in t or "temperature" in t:
+        city = t.replace("weather", "").replace("temperature", "").strip() or "Phagwara"
+        send_message(sender, get_weather(city))
+        return {"status": "ok"}
+
+    # Rule-based LPU answer
+    section = find_section(text)
+    if section:
+        send_message(sender, section)
+        return {"status": "ok"}
+
+    # AI fallback (educational only)
+    if "lpu" in t or is_edu(text):
+        send_message(sender, ai_fallback(text))
+        return {"status": "ok"}
+
+    # Block everything else
+    send_message(sender, NON_LPU_REPLY)
     return {"status": "ok"}
