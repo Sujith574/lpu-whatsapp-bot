@@ -1,9 +1,0 @@
-Hostel Leave Rules:
-• Apply via UMS.
-• Types:
-  - Day Leave
-  - Night Leave
-  - Extended Leave (+3 hrs)
-  - Emergency Leave
-• Night leave requires parent approval.
-• Convert leave before check-in only.
