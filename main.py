@@ -15,13 +15,12 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-OPENWEATHER_KEY = os.getenv("OPENWEATHER_API_KEY", "c3802e9e6d0cabfd189dde96a6f58fae")
+OPENWEATHER_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 CREATOR_MESSAGE = (
-    "I was created specially for Lovely Professional University (LPU).\n"
+    "I was created specially for Lovely Professional University (LPU). "
     "Developed by Vennela Barnana."
 )
-
 NON_LPU_REPLY = "I can answer only educational or LPU-related questions."
 
 DATA_FILE = "data.txt"
@@ -37,7 +36,7 @@ def load_data():
         text = f.read()
 
     lines = text.splitlines()
-    section_pattern = re.compile(r"^[A-Z0-9 \\-]{3,100}$")
+    section_pattern = re.compile(r"^[A-Z0-9 \\-]{3,80}$")
 
     sections = {}
     key = "general"
@@ -45,7 +44,6 @@ def load_data():
 
     for line in lines:
         stripped = line.strip()
-
         if section_pattern.match(stripped):
             if buffer:
                 sections[key] = "\n".join(buffer).strip()
@@ -67,10 +65,9 @@ SECTIONS = load_data()
 def get_weather(city):
     try:
         url = (
-            f"https://api.openweathermap.org/data/2.5/weather"
-            f"?q={city}&appid={OPENWEATHER_KEY}&units=metric"
+            f"https://api.openweathermap.org/data/2.5/weather?"
+            f"q={city}&appid={OPENWEATHER_KEY}&units=metric"
         )
-
         r = requests.get(url).json()
 
         if r.get("cod") != 200:
@@ -80,12 +77,7 @@ def get_weather(city):
         feels = r["main"]["feels_like"]
         desc = r["weather"][0]["description"].title()
 
-        return (
-            f"{city.title()} Weather:\n"
-            f"Temp: {temp}°C\n"
-            f"Feels Like: {feels}°C\n"
-            f"{desc}"
-        )
+        return f"{city.title()} Weather:\nTemp: {temp}°C\nFeels: {feels}°C\n{desc}"
     except:
         return "Weather service unavailable."
 
@@ -111,23 +103,23 @@ keyword_map = {
 
 def find_section(text):
     t = text.lower()
-    for word, section_key in keyword_map.items():
-        if word in t and section_key in SECTIONS:
-            return SECTIONS[section_key]
+    for word, key in keyword_map.items():
+        if word in t and key in SECTIONS:
+            return SECTIONS[key]
     return None
 
 
 # ---------------- EDUCATIONAL CHECK ----------------
-edu_keywords = [
-    "attendance", "exam", "hostel", "leave", "cgpa", "ums", "rms",
-    "semester", "course", "mess", "warden", "wifi", "security",
-    "placement", "library", "medical", "rfid"
+edu_words = [
+    "attendance", "exam", "hostel", "leave", "cgpa", "ums", "rms", "semester",
+    "course", "mess", "warden", "wifi", "security", "placement",
+    "library", "medical", "rfid"
 ]
 
 
-def is_educational(text):
+def is_edu(text):
     t = text.lower()
-    return any(x in t for x in edu_keywords)
+    return any(x in t for x in edu_words)
 
 
 # ---------------- AI FALLBACK ----------------
@@ -135,7 +127,7 @@ def ai_fallback(text):
     if not GROQ_API_KEY:
         return "AI backend offline."
 
-    if not is_educational(text):
+    if not is_edu(text):
         return NON_LPU_REPLY
 
     headers = {
@@ -146,8 +138,8 @@ def ai_fallback(text):
     payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {"role": "system", "content": "Give short and clear replies for LPU educational queries."},
-            {"role": "user", "content": text},
+            {"role": "system", "content": "Give short and clear replies for LPU educational questions."},
+            {"role": "user", "content": text}
         ]
     }
 
@@ -155,11 +147,11 @@ def ai_fallback(text):
         r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             json=payload,
-            headers=headers,
-            timeout=10
+            headers=headers
         ).json()
 
         return r["choices"][0]["message"]["content"]
+
     except Exception as e:
         logging.error(e)
         return "AI service unavailable."
@@ -168,12 +160,10 @@ def ai_fallback(text):
 # ---------------- SEND MESSAGE ----------------
 def send_message(to, body):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
-
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
-
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
@@ -181,10 +171,9 @@ def send_message(to, body):
     }
 
     try:
-        r = requests.post(url, json=payload)
-        logging.info(f"Send message response: {r.text}")
-    except Exception as e:
-        logging.error(e)
+        requests.post(url, json=payload)
+    except:
+        pass
 
 
 # ---------------- VERIFY WEBHOOK ----------------
@@ -215,19 +204,18 @@ async def webhook(request: Request):
     if t in ["hi", "hello", "hey", "menu"]:
         send_message(
             sender,
-            "Hello! I am your LPU Assistant.\nAsk anything about LPU.\n\nType *developer* to know who created me."
+            "Hello! I am your LPU Assistant.\nType *developer* to know who created me."
         )
         return {"status": "ok"}
 
-    # Developer
-    if "developer" in t or "who created" in t:
+    if "developer" in t:
         send_message(sender, CREATOR_MESSAGE)
         return {"status": "ok"}
 
     # Time
     if t in ["time", "current time", "time now"]:
         now = datetime.datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%I:%M %p")
-        send_message(sender, f"Current time: {now}")
+        send_message(sender, f"Time: {now}")
         return {"status": "ok"}
 
     # Weather
@@ -243,10 +231,10 @@ async def webhook(request: Request):
         return {"status": "ok"}
 
     # AI fallback
-    if "lpu" in t or is_educational(text):
+    if "lpu" in t or is_edu(text):
         send_message(sender, ai_fallback(text))
         return {"status": "ok"}
 
-    # Reject other questions
+    # Block everything else
     send_message(sender, NON_LPU_REPLY)
     return {"status": "ok"}
