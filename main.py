@@ -17,11 +17,6 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-CREATOR_MESSAGE = (
-    "I was created and developed by the Founders of Dream Sphere, "
-    "and I serve as the official AI Assistant for Lovely Professional University (LPU)."
-)
-
 
 # ------------------------------------------------------
 # LOAD KNOWLEDGE BASE FILE
@@ -37,12 +32,21 @@ LPU_DATA = load_knowledge()
 
 
 # ------------------------------------------------------
-# RULE-BASED REPLIES (Highest Priority)
+# CREATOR MESSAGE (GLOBAL)
+# ------------------------------------------------------
+CREATOR_MESSAGE = (
+    "I was created and developed by the Founders of Dream Sphere and "
+    "Lovely Professional University (LPU) as the official AI Assistant."
+)
+
+
+# ------------------------------------------------------
+# RULE-BASED REPLIES
 # ------------------------------------------------------
 def rule_based(text):
     t = text.lower()
 
-    # CREATOR INFORMATION OVERRIDE
+    # CREATOR QUESTIONS (highest priority)
     if (
         "who built you" in t or
         "who created you" in t or
@@ -52,11 +56,13 @@ def rule_based(text):
         "founder" in t or
         "your creator" in t or
         "your developer" in t or
-        "who are your founders" in t
+        "who designed you" in t or
+        "who is your creator" in t or
+        "who is your developer" in t
     ):
         return CREATOR_MESSAGE
 
-    # Quick LPU Answers
+    # LPU RULES
     rules = {
         "attendance": "Minimum 75% attendance required. Below that is SOA (Shortage of Attendance).",
         "soa": "SOA = Shortage of Attendance (below 75%).",
@@ -94,12 +100,12 @@ def ai_reply(user_message):
     }
 
     system_prompt = (
-        "You are the official AI Assistant for Lovely Professional University (LPU).\n"
-        "You must use the LPU Knowledge Base below to answer questions accurately.\n\n"
-        "IMPORTANT RULE:\n"
-        f"Whenever someone asks who created you, who developed you, who built you, or who your founders are, "
-        f"you MUST ALWAYS answer exactly this: '{CREATOR_MESSAGE}'.\n"
-        "Never say LPU created you. LPU uses you, but Dream Sphere built you.\n\n"
+        "You are the Official AI Assistant for Lovely Professional University (LPU).\n"
+        "Use the LPU knowledge base to answer all student queries accurately.\n"
+        "IMPORTANT: Whenever someone asks who created you, who built you, who developed you, "
+        "or who your founders are, you MUST ALWAYS answer exactly:\n"
+        f"'{CREATOR_MESSAGE}'.\n"
+        "Do not mention anything else about your creation.\n\n"
         f"LPU KNOWLEDGE BASE:\n{LPU_DATA}\n\n"
     )
 
@@ -119,24 +125,22 @@ def ai_reply(user_message):
 
         if "choices" in data:
             reply = data["choices"][0]["message"]["content"]
-        elif "error" in data:
-            return f"Groq Error: {data['error'].get('message', 'Unknown error')}"
         else:
             return "Unexpected AI response."
 
-        # FINAL SAFETY FILTER (AI CANNOT SAY LPU CREATED YOU)
-        rl = reply.lower()
+        # FINAL SAFETY FILTER (AI cannot lie)
+        final = reply.lower()
         if (
-            ("created" in rl or "developed" in rl or "built" in rl or "founder" in rl)
-            and ("lpu" in rl or "university" in rl or "official" in rl)
+            ("created" in final or "developer" in final or "built" in final or "founder" in final)
+            and ("lpu" in final or "lovely" in final or "university" in final or "dream sphere" in final)
         ):
-            reply = CREATOR_MESSAGE
+            return CREATOR_MESSAGE
 
         return reply
 
     except Exception as e:
         logging.error(f"AI ERROR: {e}")
-        return "AI is facing issues. Please try again later."
+        return "AI services are temporarily unavailable. Please try again shortly."
 
 
 # ------------------------------------------------------
@@ -162,7 +166,7 @@ def send_message(to, text):
 
 
 # ------------------------------------------------------
-# VERIFY WEBHOOK
+# WEBHOOK VERIFICATION
 # ------------------------------------------------------
 @app.get("/webhook")
 async def verify(request: Request):
@@ -184,15 +188,15 @@ async def webhook(request: Request):
         entry = data["entry"][0]
         message = entry["changes"][0]["value"].get("messages", [])[0]
         sender = message["from"]
-        text = message.get("text", {}).get("body", "")
+        text = message.get("text", {}).get("body", "").strip()
 
     except:
         return {"status": "ignored"}
 
-    # Welcome Message
+    # WELCOME MESSAGE
     if text.lower() in ["hi", "hello", "hey", "menu", "start"]:
         welcome = (
-            "👋 Hello! I am your *LPU Assistant Bot*.\n\n"
+            "👋 Hello! I am your *Official LPU Assistant Bot*.\n\n"
             "Ask me anything about:\n"
             "• Attendance rules\n"
             "• Hostel timings\n"
@@ -200,20 +204,20 @@ async def webhook(request: Request):
             "• CGPA calculation\n"
             "• Fees & fines\n"
             "• Dress code\n"
-            "• LPU regulations\n"
+            "• LPU policies\n"
             "• Academic processes\n\n"
             "How can I help you today? 😊"
         )
         send_message(sender, welcome)
         return {"status": "ok"}
 
-    # Rule-based quick reply
+    # RULE-BASED
     rb = rule_based(text)
     if rb:
         send_message(sender, rb)
         return {"status": "ok"}
 
-    # AI fallback
+    # AI FALLBACK
     reply = ai_reply(text)
     send_message(sender, reply)
 
