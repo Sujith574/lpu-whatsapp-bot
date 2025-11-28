@@ -1,153 +1,203 @@
 =====================================================================
 LPU OFFICIAL KNOWLEDGE BASE
-(For AI Assistant of Lovely Professional University)
+(Used by the LPU AI Assistant Chatbot)
 =====================================================================
 
 ATTENDANCE RULES
-• Minimum 75% required per course.
-• Below 75% = SOA → not allowed for end-term exam.
-• Medical attendance only via Uni-Health Centre.
-• Attendance counted till last teaching day.
+• Minimum 75% attendance required per course.
+• Below 75% leads to SOA → student cannot appear for end-term exam.
+• Medical attendance is added ONLY when the student visits Uni-Health Centre.
+• Attendance counted up to the last teaching day.
 • Check attendance: UMS → Academics → Attendance.
-• Issues in attendance → Raise RMS (Attendance category).
-• Low attendance → attend remaining classes & meet faculty.
+• Issues with attendance → Raise RMS (Category: Attendance).
+• If attendance is low → attend all remaining classes + meet faculty.
 
 CGPA & GRADING RULES
-• CGPA = (Credits × Grade Points) / Total Credits.
-• Grade Points: O-10, A+-9, A-8, B+-7, B-6, C-5, D-4.
-• Reappear replaces ONLY end-term marks.
-• Internals remain same.
-• CGPA increases only if grade improves.
-• Transcripts available on UMS or Registrar Office.
+• CGPA = (Total of Credits × Grade Points) ÷ Total Credits.
+• Grade Points:
+  - O = 10
+  - A+ = 9
+  - A = 8
+  - B+ = 7
+  - B = 6
+  - C = 5
+  - D = 4
+• Reappear replaces only the END-TERM marks, not internal marks.
+• Internal marks remain same even after reappear.
+• CGPA improves only if the new grade is higher than previous.
+• Transcripts available on UMS or at Registrar Office.
 
 DISCIPLINE RULES
-• Ragging, fights, abuse, alcohol, drugs strictly banned.
-• Social media abuse → cyber cell action.
-• Cheating during exams → UMC case → severe penalty.
-• Penalties: warning, fine, suspension, rustication.
+• Ragging, bullying, harassment strictly prohibited.
+• Fights, abusive behavior, alcohol, drugs → strict action.
+• Social media abuse or defamation → Cyber Cell action.
+• Cheating in exams → UMC case → exam cancellation + penalties.
+• Possible punishments:
+  - Warning
+  - Fine
+  - Suspension
+  - Rustication (severe cases)
 
-DRESS CODE
-• Formal uniform mandatory Mon–Fri.
-• Casual dress allowed Sat–Sun.
-• No shorts, ripped jeans, slippers in academic areas.
-• Lab coat mandatory in labs/workshops.
+DRESS CODE RULES
+• Formal uniform is mandatory from Monday to Friday.
+• Casual dress allowed on Saturday & Sunday.
+• Not allowed in academics:
+  - Shorts
+  - Ripped jeans
+  - Slippers
+  - Offensive prints
+• Lab coat required in labs & workshops.
 
 EXAM & REAPPEAR RULES
 • Reappear fee: ₹500 per course.
-• Only end-term marks are replaced.
-• ID Card + Admit Card mandatory.
-• No phones, smart watches allowed.
-• Late entry after 15 mins not permitted.
-• Leaving exam hall not allowed first & last 30 minutes.
+• Reappear affects only end-term marks (internal marks unchanged).
+• ID Card + Admit Card mandatory for all exams.
+• Late entry beyond 15 minutes is not allowed.
+• No leaving exam hall during first & last 30 minutes.
+• Mobiles, smartwatches, electronic devices strictly prohibited.
 
 FEE & ACCOUNTS RULES
-• Late fee approx ₹100/day (varies).
-• Pending fee → block of UMS/exams.
+• Late fee: approx ₹100/day (varies by policy).
+• Pending fees → UMS access restrictions + exam restrictions.
 • Fee receipts available on UMS.
-• Scholarships: JEE/CBSE/LPUNEST/Sports/Defense.
-• Refund rules as per LPU Refund Policy.
+• Scholarships offered:
+  - JEE
+  - CBSE/Board toppers
+  - LPUNEST
+  - Sports
+  - Defence
+• Refund rules depend on LPU Refund Policy.
 
-RMS SYSTEM (COMPLAINTS)
-• Raise all complaints through RMS.
+RMS SYSTEM (RELATIONSHIP MANAGEMENT SYSTEM)
+• RMS is for raising official complaints and requests.
 • Path: UMS → RMS → Log Request.
-• Categories: attendance, marks, hostel, water, electricity, WiFi, mess.
-• Resolves usually within 2–3 working days.
-• Escalation: Warden → HOD → Division Head.
+• RMS Categories include:
+  - Attendance
+  - Marks / Academics
+  - WiFi / Internet
+  - Electricity
+  - Water supply
+  - Hostel issues
+  - Mess complaints
+  - Maintenance & repair
+• Normal resolution time: 2–3 working days.
+• Escalation hierarchy:
+  1. Warden
+  2. HOD or Department Coordinator
+  3. Division Head
 
 HOSTEL ATTENDANCE & TIMINGS
+• Mandatory to be inside hostel before attendance timing.
 • In-time:
-  - May–Oct: 8 PM
-  - Nov–Feb: 7 PM
-  - Mar–Apr: 7:30 PM
-• Late entry results in disciplinary action.
-• Hostel attendance is mandatory daily.
+  - May–Oct → 8:00 PM
+  - Nov–Feb → 7:00 PM
+  - Mar–Apr → 7:30 PM
+• Late entry recorded and may result in disciplinary action.
+• Students must report attendance daily.
 
 HOSTEL LEAVE RULES
-• Leave only through UMS.
-• Day Leave: ~75 per term.
-• Night Leave: ~60 per term.
-• Extended Leave: +3 hours (30 per term).
-• Emergency Leave: via warden.
-• After night leave, return before attendance.
+• All leave must be applied through UMS only.
+• Day Leave limit: ~75 per term.
+• Night Leave limit: ~60 per term.
+• Extended Leave: +3 hours (about 30 per term).
+• Emergency leave is granted by warden.
+• After night leave, student must return before hostel attendance time.
+
 
 HOSTEL RULES
-• No roaming outside after attendance.
-• Silence hours: 10 PM–6 AM.
-• Cooking appliances banned.
-• Visitors allowed only in visitor rooms.
-• Anti-ragging strictly enforced.
+• No roaming outside hostel after attendance.
+• Silence hours: 10 PM – 6 AM.
+• Electric cookers, heaters, induction, etc. are not allowed.
+• Visitors only allowed in designated visitor rooms.
+• Anti-ragging rules strictly enforced.
+• Damaging hostel property → fine + disciplinary action.
 
 ID CARD RULES
-• ID mandatory everywhere.
-• Lost ID → inform warden → temporary slip (48 hrs).
-• Using someone else's ID → strict action.
+• ID Card is mandatory across campus.
+• Must carry ID during academics, exams, mess, hostels, library.
+• Lost ID procedure:
+  1. Inform warden immediately.
+  2. Receive temporary slip (valid 48 hours).
+  3. Apply for new ID via UMS.
+• Using someone else's ID is a serious violation.
 
 LIBRARY RULES
-• Silence mandatory.
-• UG: 4 books, PG: 6 books.
-• Late return = fine.
-• Bags outside; phone on silent.
+• Complete silence must be maintained.
+• Mobile phones on silent mode.
+• Borrowing limit:
+  - UG students: 4 books
+  - PG students: 6 books
+• Late return → per-day fine.
+• Bags not allowed inside reading hall.
 
 MEDICAL RULES
-• Uni-Health Centre open 24×7.
-• Medical attendance only when student visits hospital.
-• Sick food available with warden approval.
-• Emergency → call hospital staff or security.
+• Uni-Health Centre operates 24×7.
+• Medical attendance counted ONLY if student personally visits the hospital.
+• Sick food provided only with warden approval.
+• For emergencies:
+  - Contact security
+  - Contact hospital numbers
 
 MESS RULES
-• Timings:
-  - Breakfast: 7:15–9:30
-  - Lunch: 11:30–3:00
-  - Dinner: 7:30–9:30
-• No food delivered to room (except sick cases).
+• Mess timings:
+  - Breakfast: 7:15 AM – 9:30 AM
+  - Lunch: 11:30 AM – 3:00 PM
+  - Dinner: 7:30 PM – 9:30 PM
+• Food not delivered to rooms (except medical cases).
+• Misbehavior with staff → strict action.
 • Mess complaints → raise RMS.
 
 PARKING RULES
 • Only registered vehicles allowed.
+• Helmet mandatory for two-wheelers.
 • Speed limit: 30 km/hr.
-• Helmet mandatory.
-• Park only in designated zones.
+• Park only in designated parking zones.
+• Misuse/violations → penalty or suspension of vehicle pass.
 
-PLACEMENTS
-• Eligibility depends on company.
-• No active backlogs.
-• Attend placement classes & mock interviews.
-• Process: Test → Interview → Selection.
+PLACEMENTS & TRAINING
+• No active backlogs allowed for most companies.
+• Minimum CGPA depends on company.
+• Attend placement classes and mock tests regularly.
+• Recruitment process usually:
+  1. Online Test
+  2. Technical Interview
+  3. HR Interview
+• Placement support contacts available on UMS.
 
 =====================================================================
-IMPORTANT EMAILS & CONTACTS (LPU)
+IMPORTANT EMAILS & CONTACT NUMBERS
 =====================================================================
 
-📧 EMAILS
+📧 EMAIL IDs
 • AO Records: ao.records@lpu.co.in
-• Division of Student Relations (DSR): dsr@lpu.co.in
-• Examination Department: examination@lpu.co.in
-• Fees Department: onlinefee@lpu.co.in
+• DSR (Division of Student Relations): dsr@lpu.co.in
+• Examination: examination@lpu.co.in
+• Fees: onlinefee@lpu.co.in
 • Parents Support: parents@lpu.co.in
 • Admissions:
   - admissions@lpu.co.in
   - admission.record@lpu.co.in
 • Bihar Student Credit Card:
   - bihar.ssiv@lpu.co.in
-• Placement Department:
+• Placement Cell:
   - placement@lpu.co.in
-• Infotech:
+• Infotech Support:
   - infotech@lpu.co.in
 
-📞 PHONE NUMBERS
-• Division of Student Relations: 01824-510311
+📞 IMPORTANT PHONE NUMBERS
+• DSR Office: 01824-510311
 • Fees Department: 01824-520099
 • Examination Office: 01824-520150
 • Admission Helpline: 01824-517425
 • Admission WhatsApp: +91 98525-69000
 • Placement Helpline: +91 18245-20140
-• LPU Exam Records: +91 18245-20990
+• Exam Records Office: +91 18245-20990
 
 =====================================================================
-CAMPUS HELPLINE NUMBERS
+CAMPUS HELPLINE (24×7)
 =====================================================================
 
-🏥 MEDICAL (24×7)
+🏥 MEDICAL
 • Uni Hospital Reception:
   - 01824-444079
   - 01824-501227
@@ -157,8 +207,8 @@ CAMPUS HELPLINE NUMBERS
   - 75081-82840
   - 97800-36450
 
-🛡 SECURITY (24×7)
-• Emergency:
+🛡 SECURITY
+• Emergency Numbers:
   - 95018-10448
   - 01824-444362
 • Chief Security Officer:
@@ -177,27 +227,28 @@ CAMPUS HELPLINE NUMBERS
   - 98557-22332
   - 01824-444070
 
-🔥 FIRE DEPARTMENT (24×7)
-• Fire Tender: 75081-83870
+🔥 FIRE DEPARTMENT
+• Fire Tender (24×7): 75081-83870
 • Fire Officer: 97800-36430
-• Fire Office: 01824-444201
+• Fire Department Office: 01824-444201
 
 🚫 ANTI-RAGGING
 • Helpline: 98766-44331
 
 =====================================================================
-QUICK BOT TEMPLATES (AI SHOULD USE THESE WHEN NEEDED)
+QUICK RESPONSE TEMPLATES (AI MUST REFERENCE THESE)
 =====================================================================
-• Attendance very low → attend all classes + apply medical if valid.
-• How to apply leave → UMS → Hostel Leave.
-• WiFi issue → raise RMS.
-• Mess issue → RMS.
-• Lost ID → warden + temporary slip.
-• RFID apply → UMS → Security.
-• Exam rules → ID + Admit card mandatory.
-• Visitor pass → UMS → Security.
-• Placement eligibility → maintain attendance + CGPA.
+
+• “Attendance very low” → attend all classes + apply medical if valid.
+• “How to apply leave” → UMS → Hostel Leave.
+• “WiFi not working” → raise RMS (WiFi category).
+• “Mess issue” → raise RMS.
+• “Lost ID” → inform warden + temporary slip.
+• “RFID apply” → UMS → Security.
+• “Exam rules” → ID + admit card mandatory.
+• “Visitor pass” → UMS → Security.
+• “Placement eligibility” → maintain CGPA + attendance + discipline.
 
 =====================================================================
-END OF KNOWLEDGE BASE
+END OF LPU KNOWLEDGE BASE
 =====================================================================
