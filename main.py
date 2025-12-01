@@ -116,6 +116,7 @@ def get_time(city):
         logging.error(f"Time Error: {e}")
         return None
 
+
 # ------------------------------------------------------
 # AI REPLY USING GROQ
 # ------------------------------------------------------
@@ -174,12 +175,12 @@ def process_message(user_message):
 
     if any(k in msg for k in identity_keywords):
         return (
-            "I was created for Lovely Professional University (LPU) and developed by **Vennela Barnana**.\n\n"
-            "About Vennela Barnana:\n"
-            "• Author of *Unstoppable in 7 Days*\n"
+            "I was developed by **Sujith Lavudu** for Lovely Professional University (LPU).\n\n"
+            "About Sujith Lavudu:\n"
             "• Developer of AI Chatbots\n"
             "• Student at Lovely Professional University\n"
-            "• From Srikakulam, Andhra Pradesh"
+            "• From Andhra Pradesh\n"
+            "• Skilled in Python, Web Development & AI Projects"
         )
 
     # -------------------------------
@@ -194,12 +195,11 @@ def process_message(user_message):
 
     if any(k in msg for k in training_keywords):
         return (
-            "I work using a combination of:\n"
-            "• A detailed LPU Knowledge Base provided by my developer\n"
-            "• Real-time APIs for weather and world time\n"
-            "• AI reasoning for education-based questions\n"
-            "• Custom rules written by my developer\n\n"
-            "This allows me to answer accurately about LPU and education."
+            "I work using:\n"
+            "• LPU Knowledge Base\n"
+            "• Real-time APIs (weather, time)\n"
+            "• AI reasoning for education\n"
+            "• Custom logic designed by my developer"
         )
 
     # -------------------------------
