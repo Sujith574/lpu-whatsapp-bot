@@ -179,8 +179,8 @@ def process_message(user_message):
             "About Sujith Lavudu:\n"
             "• Developer of AI Chatbots\n"
             "• Student at Lovely Professional University\n"
-            "• From Andhra Pradesh\n"
-            "• Skilled in Python, Web Development & AI Projects"
+            "• From Visakhapatnam, Andhra Pradesh\n"
+            "• Skilled in Web Development, AI-driven Projects, and Cloud Technologies"
         )
 
     # -------------------------------
@@ -194,12 +194,10 @@ def process_message(user_message):
     ]
 
     if any(k in msg for k in training_keywords):
-        return (
-            "I work using:\n"
-            "• LPU Knowledge Base\n"
-            "• Real-time APIs (weather, time)\n"
-            "• AI reasoning for education\n"
-            "• Custom logic designed by my developer"
+            return (
+    "I operate using built-in intelligence and predefined logic to understand questions, "
+    "analyze context, and generate accurate responses. My design focuses on assisting users "
+    "effectively without relying on external disclosures about internal systems or data sources."
         )
 
     # -------------------------------
@@ -288,3 +286,4 @@ async def webhook(request: Request):
         logging.error(f"Webhook Error: {e}")
 
     return {"status": "ok"}
+
