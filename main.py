@@ -287,3 +287,22 @@ async def webhook(request: Request):
 
     return {"status": "ok"}
 
+
+# ------------------------------------------------------
+# CHAT API FOR MOBILE / WEB APP
+# ------------------------------------------------------
+@app.post("/chat")
+async def chat_api(request: Request):
+    try:
+        data = await request.json()
+        user_message = data.get("message", "")
+
+        if not user_message:
+            return {"reply": "Please send a message."}
+
+        reply = process_message(user_message)
+        return {"reply": reply}
+
+    except Exception as e:
+        logging.error(f"Chat API Error: {e}")
+        return {"reply": "Server error. Please try again."}
