@@ -19,8 +19,6 @@ logging.basicConfig(level=logging.INFO)
 # GEMINI CLIENT (STABLE + SUPPORTED)
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-model = client.models.get("gemini-1.0-pro")
-
 # ------------------------------------------------------
 # FIRESTORE INIT (Render Secret File Auth)
 # ------------------------------------------------------
@@ -161,12 +159,14 @@ QUESTION:
 """
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-1.0-pro",
+            contents=prompt
+        )
         return response.text.strip()
     except Exception as e:
         logging.error(f"Gemini error: {e}")
         return "AI service is temporarily unavailable."
-
 # ------------------------------------------------------
 # MESSAGE PROCESSOR
 # ------------------------------------------------------
@@ -254,3 +254,4 @@ async def chat_api(request: Request):
     if not message:
         return {"reply": "Please send a message."}
     return {"reply": process_message(message)}
+
