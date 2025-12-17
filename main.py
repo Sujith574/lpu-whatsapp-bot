@@ -16,7 +16,7 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# GEMINI CLIENT (CONFIRMED WORKING MODEL)
+# GEMINI CLIENT (CONFIRMED WORKING)
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 GEMINI_MODEL = "models/gemini-2.5-flash"
@@ -27,11 +27,35 @@ GEMINI_MODEL = "models/gemini-2.5-flash"
 db = firestore.Client()
 
 # ------------------------------------------------------
-# ENVIRONMENT VARIABLES
+# ENV VARIABLES
 # ------------------------------------------------------
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
+
+# ------------------------------------------------------
+# GREETING HANDLER
+# ------------------------------------------------------
+def handle_greeting(msg: str):
+    greetings = ["hi", "hii", "hello", "hey", "namaste", "hai"]
+
+    if msg in greetings:
+        return (
+            "Namaste! 🙏\n\n"
+            "How can I assist you today?\n"
+            "You can ask questions related to *Lovely Professional University (LPU)* "
+            "or general education."
+        )
+
+    if any(g in msg for g in greetings):
+        return (
+            "Hello! 👋\n\n"
+            "How can I help you today?\n"
+            "Feel free to ask about *LPU academics, hostels, fees, exams,* "
+            "or any general education topic."
+        )
+
+    return None
 
 # ------------------------------------------------------
 # LOAD STATIC LPU KNOWLEDGE
@@ -45,15 +69,15 @@ def load_lpu_knowledge():
         return ""
 
 # ------------------------------------------------------
-# LOAD ADMIN TEXT FROM FIRESTORE
+# LOAD ADMIN DATA FROM FIRESTORE
 # ------------------------------------------------------
 def load_admin_firestore_text():
     try:
         docs = db.collection("lpu_content").where("type", "==", "text").stream()
         content = ""
         for doc in docs:
-            data = doc.to_dict()
-            content += f"{data.get('title','')}:\n{data.get('textContent','')}\n\n"
+            d = doc.to_dict()
+            content += f"{d.get('title','')}:\n{d.get('textContent','')}\n\n"
         return content
     except Exception as e:
         logging.error(f"Firestore read error: {e}")
@@ -64,12 +88,18 @@ def load_admin_firestore_text():
 # ------------------------------------------------------
 def get_full_lpu_knowledge():
     return f"""
-===== OFFICIAL LPU RULES, POLICIES & STUDENT WINGS =====
 {load_lpu_knowledge()}
 
-===== LATEST OFFICIAL ADMIN UPDATES =====
 {load_admin_firestore_text()}
 """
+
+# ------------------------------------------------------
+# SIMPLE KNOWLEDGE CHECK
+# ------------------------------------------------------
+def knowledge_exists(question: str):
+    kb = get_full_lpu_knowledge().lower()
+    words = [w for w in question.lower().split() if len(w) > 3]
+    return any(w in kb for w in words)
 
 # ------------------------------------------------------
 # WEATHER
@@ -83,20 +113,24 @@ def get_weather(city):
             f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1",
             timeout=10
         ).json()
+
         if "results" not in geo:
             return None
+
         r = geo["results"][0]
         weather = requests.get(
             f"https://api.open-meteo.com/v1/forecast?latitude={r['latitude']}&longitude={r['longitude']}&current_weather=true",
             timeout=10
         ).json()
+
         w = weather.get("current_weather")
         if not w:
             return None
+
         return (
-            f"🌤 Weather in {r['name']}:\n"
-            f"Temperature: {w['temperature']}°C\n"
-            f"Wind Speed: {w['windspeed']} km/h"
+            f"🌤 *Weather in {r['name']}*\n"
+            f"• Temperature: {w['temperature']}°C\n"
+            f"• Wind Speed: {w['windspeed']} km/h"
         )
     except:
         return None
@@ -113,34 +147,38 @@ def get_time(city):
             f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1",
             timeout=10
         ).json()
+
         if "results" not in geo:
             return None
+
         r = geo["results"][0]
         now = datetime.now(pytz.timezone(r["timezone"]))
-        return f"⏰ Current time in {r['name']}: {now.strftime('%Y-%m-%d %H:%M:%S')}"
+        return f"⏰ *Current time in {r['name']}*: {now.strftime('%H:%M:%S')}"
     except:
         return None
 
 # ------------------------------------------------------
-# GEMINI AI RESPONSE (EDUCATION ONLY)
+# GEMINI AI RESPONSE
 # ------------------------------------------------------
 def ai_reply(user_message):
     prompt = f"""
-You are the Official Educational AI Assistant for Lovely Professional University (LPU).
+You are the Official AI Assistant for Lovely Professional University (LPU).
 
-RULES:
-- Answer ONLY education and LPU-related queries.
-- If NOT educational, reply exactly:
-  "I am designed only for educational and LPU-related queries."
-- If information is missing, reply exactly:
-  "I don't have updated information on this."
+INSTRUCTIONS:
+- First, try to answer using VERIFIED LPU INFORMATION.
+- If not found, answer using general educational knowledge.
+- Understand short, informal, or mixed-language questions naturally.
+- Keep answers SHORT, clear, and professional.
+- Prefer bullet points.
+- Do NOT mention sources.
 
-VERIFIED INFORMATION:
+VERIFIED LPU INFORMATION:
 {get_full_lpu_knowledge()}
 
 QUESTION:
 {user_message}
 """
+
     try:
         response = client.models.generate_content(
             model=GEMINI_MODEL,
@@ -152,33 +190,39 @@ QUESTION:
         return "AI service is temporarily unavailable."
 
 # ------------------------------------------------------
-# MESSAGE PROCESSOR
+# MESSAGE PROCESSOR (FINAL FLOW)
 # ------------------------------------------------------
 def process_message(user_message):
-    msg = user_message.lower()
+    msg = user_message.lower().strip()
 
-    if any(k in msg for k in ["who created you", "who developed you", "who made you"]):
-        return "I was developed by Sujith Lavudu for Lovely Professional University (LPU)."
+    # 1️⃣ Greeting
+    greeting = handle_greeting(msg)
+    if greeting:
+        return greeting
 
+    # 2️⃣ Utilities
     if any(k in msg for k in ["weather", "temperature", "climate"]):
         return get_weather(clean_city(msg)) or "Weather information not found."
 
     if "time" in msg:
         return get_time(clean_time_city(msg)) or "Time information not found."
 
+    # 3️⃣ LPU knowledge → Gemini formatting
+    if knowledge_exists(user_message):
+        return ai_reply(user_message)
+
+    # 4️⃣ Fallback → Gemini
     return ai_reply(user_message)
 
 # ------------------------------------------------------
 # SEND WHATSAPP MESSAGE
 # ------------------------------------------------------
 def send_message(to, text):
-    url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages" 
-
+    url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
-
     payload = {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
@@ -190,10 +234,8 @@ def send_message(to, text):
         }
     }
 
-    response = requests.post(url, headers=headers, json=payload)
-
-    logging.info(f"WhatsApp send status: {response.status_code}")
-    logging.info(f"WhatsApp response: {response.text}")
+    r = requests.post(url, headers=headers, json=payload)
+    logging.info(f"WhatsApp send: {r.status_code} | {r.text}")
 
 # ------------------------------------------------------
 # VERIFY WEBHOOK
@@ -222,8 +264,6 @@ async def webhook(request: Request):
             return {"status": "ignored"}
 
         value = changes[0].get("value", {})
-
-        # Ignore status updates
         if "messages" not in value:
             return {"status": "ignored"}
 
@@ -241,7 +281,7 @@ async def webhook(request: Request):
     return {"status": "ok"}
 
 # ------------------------------------------------------
-# CHAT API
+# CHAT API (APP / WEB)
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
@@ -250,4 +290,3 @@ async def chat_api(request: Request):
     if not message:
         return {"reply": "Please send a message."}
     return {"reply": process_message(message)}
-
