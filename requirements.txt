@@ -4,4 +4,4 @@ requests
 pytz
 python-dotenv
 google-cloud-firestore
-google-generativeai
+google-genai
