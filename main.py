@@ -7,6 +7,7 @@ import pytz
 import re
 
 from google.cloud import firestore
+import google.generativeai as genai
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
@@ -17,16 +18,16 @@ logging.basicConfig(level=logging.INFO)
 db = firestore.Client()
 
 # ------------------------------------------------------
+# GEMINI CONFIG
+# ------------------------------------------------------
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+# ------------------------------------------------------
 # ENVIRONMENT VARIABLES
 # ------------------------------------------------------
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
-
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # ------------------------------------------------------
 # LOAD STATIC LPU KNOWLEDGE (FILE)
@@ -139,37 +140,36 @@ def get_time(city):
         return None
 
 # ------------------------------------------------------
-# AI REPLY (GROQ)
+# AI REPLY (GEMINI)
 # ------------------------------------------------------
 def ai_reply(user_message):
-    system_message = (
+    system_prompt = (
         "You are the official AI Assistant for Lovely Professional University (LPU).\n"
-        "Answer ONLY using the verified information below.\n"
-        "If information is missing, say:\n"
+        "Answer ONLY using the verified LPU information below.\n"
+        "If information is missing, reply exactly:\n"
         "'I don't have updated information on this.'\n\n"
         f"{get_full_lpu_knowledge()}"
     )
 
-    payload = {
-        "model": GROQ_MODEL,
-        "messages": [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message}
-        ],
-        "temperature": 0.2
-    }
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=system_prompt
+        )
 
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
+        response = model.generate_content(
+            user_message,
+            generation_config={
+                "temperature": 0.2,
+                "max_output_tokens": 512
+            }
+        )
 
-    res = requests.post(GROQ_URL, json=payload, headers=headers).json()
+        return response.text
 
-    if "choices" in res:
-        return res["choices"][0]["message"]["content"]
-
-    return "AI backend error."
+    except Exception as e:
+        logging.error(f"Gemini Error: {e}")
+        return "AI service is temporarily unavailable."
 
 # ------------------------------------------------------
 # MESSAGE PROCESSOR
