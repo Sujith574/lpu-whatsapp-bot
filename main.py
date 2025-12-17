@@ -152,21 +152,14 @@ def ai_reply(user_message):
     )
 
     try:
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            system_instruction=system_prompt
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=[
+                {"role": "system", "parts": [{"text": system_prompt}]},
+                {"role": "user", "parts": [{"text": user_message}]},
+            ],
         )
-
-        response = model.generate_content(
-            user_message,
-            generation_config={
-                "temperature": 0.2,
-                "max_output_tokens": 512
-            }
-        )
-
         return response.text
-
     except Exception as e:
         logging.error(f"Gemini Error: {e}")
         return "AI service is temporarily unavailable."
@@ -242,4 +235,5 @@ async def chat_api(request: Request):
     if not message:
         return {"reply": "Please send a message."}
     return {"reply": process_message(message)}
+
 
