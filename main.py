@@ -16,7 +16,7 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# GEMINI CLIENT (CONFIRMED WORKING)
+# GEMINI CLIENT (CONFIRMED STABLE)
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 GEMINI_MODEL = "models/gemini-2.5-flash"
@@ -37,13 +37,13 @@ PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 # GREETING HANDLER
 # ------------------------------------------------------
 def handle_greeting(msg: str):
-    greetings = ["hi", "hii", "hello", "hey", "namaste", "hai"]
+    greetings = ["hi", "hii", "hello", "hey", "hai", "namaste"]
 
     if msg in greetings:
         return (
             "Namaste! 🙏\n\n"
             "How can I assist you today?\n"
-            "You can ask questions related to *Lovely Professional University (LPU)* "
+            "You may ask questions related to *Lovely Professional University (LPU)* "
             "or general education."
         )
 
@@ -52,10 +52,16 @@ def handle_greeting(msg: str):
             "Hello! 👋\n\n"
             "How can I help you today?\n"
             "Feel free to ask about *LPU academics, hostels, fees, exams,* "
-            "or any general education topic."
+            "or other education-related topics."
         )
 
     return None
+
+# ------------------------------------------------------
+# NORMALIZE USER MESSAGE (HINGLISH SAFE)
+# ------------------------------------------------------
+def normalize_user_message(msg: str) -> str:
+    return msg.strip()
 
 # ------------------------------------------------------
 # LOAD STATIC LPU KNOWLEDGE
@@ -84,7 +90,7 @@ def load_admin_firestore_text():
         return ""
 
 # ------------------------------------------------------
-# COMBINED KNOWLEDGE
+# COMBINED KNOWLEDGE BASE
 # ------------------------------------------------------
 def get_full_lpu_knowledge():
     return f"""
@@ -158,27 +164,34 @@ def get_time(city):
         return None
 
 # ------------------------------------------------------
-# GEMINI AI RESPONSE
+# GEMINI AI RESPONSE (HINGLISH INPUT, ENGLISH OUTPUT)
 # ------------------------------------------------------
 def ai_reply(user_message):
+    normalized_msg = normalize_user_message(user_message)
+
     prompt = f"""
 You are the Official AI Assistant for Lovely Professional University (LPU).
 
-INSTRUCTIONS:
-- First, try to answer using VERIFIED LPU INFORMATION.
+LANGUAGE RULES (STRICT):
+- User may ask in:
+  • English
+  • Hindi written in English (Hinglish)
+- YOU MUST ALWAYS REPLY IN **ENGLISH ONLY**
+- Never reply in Hindi or Hinglish.
+
+ANSWERING RULES:
+- First, use VERIFIED LPU INFORMATION if available.
 - If not found, answer using general educational knowledge.
-- Understand short, informal, or mixed-language questions naturally.
 - Keep answers SHORT, clear, and professional.
 - Prefer bullet points.
-- Do NOT mention sources.
+- Do NOT mention sources, AI models, or training data.
 
 VERIFIED LPU INFORMATION:
 {get_full_lpu_knowledge()}
 
-QUESTION:
-{user_message}
+USER QUESTION:
+{normalized_msg}
 """
-
     try:
         response = client.models.generate_content(
             model=GEMINI_MODEL,
@@ -190,28 +203,39 @@ QUESTION:
         return "AI service is temporarily unavailable."
 
 # ------------------------------------------------------
-# MESSAGE PROCESSOR (FINAL FLOW)
+# MESSAGE PROCESSOR
 # ------------------------------------------------------
 def process_message(user_message):
     msg = user_message.lower().strip()
 
-    # 1️⃣ Greeting
+    # Greeting
     greeting = handle_greeting(msg)
     if greeting:
         return greeting
 
-    # 2️⃣ Utilities
+    # Developer identity
+    identity_keywords = [
+        "who developed you", "who created you", "who made you",
+        "your developer", "your creator", "who built you"
+    ]
+    if any(k in msg for k in identity_keywords):
+        return (
+            "I was developed by *Sujith Lavudu and Vennela Barnana* "
+            "for Lovely Professional University (LPU)."
+        )
+
+    # Utilities
     if any(k in msg for k in ["weather", "temperature", "climate"]):
         return get_weather(clean_city(msg)) or "Weather information not found."
 
     if "time" in msg:
         return get_time(clean_time_city(msg)) or "Time information not found."
 
-    # 3️⃣ LPU knowledge → Gemini formatting
+    # LPU knowledge → Gemini formatting
     if knowledge_exists(user_message):
         return ai_reply(user_message)
 
-    # 4️⃣ Fallback → Gemini
+    # Fallback → Gemini
     return ai_reply(user_message)
 
 # ------------------------------------------------------
