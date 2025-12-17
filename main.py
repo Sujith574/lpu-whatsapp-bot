@@ -16,14 +16,14 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
+# GEMINI CLIENT (CORRECT WAY – NEW SDK)
+# ------------------------------------------------------
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+# ------------------------------------------------------
 # FIRESTORE INIT (Service Account via Render Secrets)
 # ------------------------------------------------------
 db = firestore.Client()
-
-# ------------------------------------------------------
-# GEMINI CLIENT (LATEST SDK)
-# ------------------------------------------------------
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # ------------------------------------------------------
 # ENVIRONMENT VARIABLES
@@ -83,12 +83,18 @@ def get_full_lpu_knowledge():
 # WEATHER (EDUCATIONAL UTILITY)
 # ------------------------------------------------------
 def clean_city(text):
-    return re.sub(r"(weather|climate|temperature|in|at|of)", "", text, flags=re.I).strip()
+    return re.sub(
+        r"(weather|climate|temperature|in|at|of)",
+        "",
+        text,
+        flags=re.I
+    ).strip()
 
 def get_weather(city):
     try:
         geo = requests.get(
-            f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
+            f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1",
+            timeout=10
         ).json()
 
         if "results" not in geo:
@@ -98,7 +104,8 @@ def get_weather(city):
         lat, lon = r["latitude"], r["longitude"]
 
         weather = requests.get(
-            f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+            f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true",
+            timeout=10
         ).json()
 
         w = weather.get("current_weather")
@@ -110,19 +117,26 @@ def get_weather(city):
             f"Temperature: {w['temperature']}°C\n"
             f"Wind Speed: {w['windspeed']} km/h"
         )
-    except:
+    except Exception as e:
+        logging.error(e)
         return None
 
 # ------------------------------------------------------
 # WORLD TIME (EDUCATIONAL UTILITY)
 # ------------------------------------------------------
 def clean_time_city(text):
-    return re.sub(r"(time|current|what|is|in)", "", text, flags=re.I).strip()
+    return re.sub(
+        r"(time|current|what|is|in)",
+        "",
+        text,
+        flags=re.I
+    ).strip()
 
 def get_time(city):
     try:
         geo = requests.get(
-            f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
+            f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1",
+            timeout=10
         ).json()
 
         if "results" not in geo:
@@ -131,14 +145,15 @@ def get_time(city):
         r = geo["results"][0]
         now = datetime.now(pytz.timezone(r["timezone"]))
         return f"⏰ Current time in {r['name']}: {now.strftime('%Y-%m-%d %H:%M:%S')}"
-    except:
+    except Exception as e:
+        logging.error(e)
         return None
 
 # ------------------------------------------------------
 # GEMINI AI RESPONSE (STRICT EDUCATION MODE)
 # ------------------------------------------------------
 def ai_reply(user_message):
-    prompt = f"""
+    system_prompt = f"""
 You are the Official Educational AI Assistant for Lovely Professional University (LPU).
 
 PURPOSE:
@@ -146,39 +161,36 @@ PURPOSE:
 - You must understand questions naturally like the Gemini app.
 - You answer academic, educational, and LPU-related queries only.
 
-YOU ARE ALLOWED TO ANSWER:
+ALLOWED:
 - LPU academics, rules, policies, DSW, UCC, hostels, exams, attendance, fees
-- Student welfare and university procedures
-- General education questions (science, math, technology, coding, GK)
+- Student welfare and official university procedures
+- General education topics (science, math, technology, coding, GK)
 - Career guidance related to education
 
-YOU ARE STRICTLY NOT ALLOWED TO ANSWER:
-- Entertainment (movies, songs, celebrities)
-- Politics (non-academic)
+NOT ALLOWED:
+- Entertainment, movies, songs
+- Non-academic politics
 - Personal opinions
 - Casual or irrelevant conversation
 
 RULES:
-- Answer ONLY using the verified information below.
-- If the question is NOT education-related, reply exactly:
+- Use ONLY the verified information below.
+- If NOT educational, reply exactly:
   "I am designed only for educational and LPU-related queries."
-- If information is missing, reply exactly:
+- If info is missing, reply exactly:
   "I don't have updated information on this."
-- Keep answers clear, professional, and student-friendly.
+- Keep answers professional, clear, and student-friendly.
 
 VERIFIED INFORMATION:
 {get_full_lpu_knowledge()}
-
-STUDENT QUESTION:
-{user_message}
 """
 
     try:
         response = client.models.generate_content(
             model="gemini-1.5-flash",
-            contents=prompt
+            contents=[system_prompt, user_message],
         )
-        return response.text
+        return response.text.strip()
     except Exception as e:
         logging.error(f"Gemini error: {e}")
         return "AI service is temporarily unavailable."
@@ -189,8 +201,15 @@ STUDENT QUESTION:
 def process_message(user_message):
     msg = user_message.lower()
 
-    if any(k in msg for k in ["who created you", "who developed you", "who made you"]):
-        return "I was developed by Sujith Lavudu for Lovely Professional University (LPU)."
+    if any(k in msg for k in [
+        "who created you",
+        "who developed you",
+        "who made you"
+    ]):
+        return (
+            "I was developed by Sujith Lavudu "
+            "for Lovely Professional University (LPU)."
+        )
 
     if any(k in msg for k in ["weather", "temperature", "climate"]):
         return get_weather(clean_city(msg)) or "Weather information not found."
@@ -214,7 +233,7 @@ def send_message(to, text):
         "to": to,
         "text": {"body": text}
     }
-    requests.post(url, json=payload, headers=headers)
+    requests.post(url, json=payload, headers=headers, timeout=10)
 
 # ------------------------------------------------------
 # VERIFY WEBHOOK
