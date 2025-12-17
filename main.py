@@ -9,18 +9,21 @@ import re
 from google.cloud import firestore
 from google import genai
 
+# ------------------------------------------------------
+# APP INIT
+# ------------------------------------------------------
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# FIRESTORE INIT (Render uses service account automatically)
+# FIRESTORE INIT (Service Account via Render Secrets)
 # ------------------------------------------------------
 db = firestore.Client()
 
 # ------------------------------------------------------
-# GEMINI CONFIG
+# GEMINI CLIENT (LATEST SDK)
 # ------------------------------------------------------
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # ------------------------------------------------------
 # ENVIRONMENT VARIABLES
@@ -30,14 +33,14 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
 # ------------------------------------------------------
-# LOAD STATIC LPU KNOWLEDGE (FILE)
+# LOAD STATIC LPU KNOWLEDGE (GitHub file)
 # ------------------------------------------------------
 def load_lpu_knowledge():
     try:
         with open("lpu_knowledge.txt", "r", encoding="utf-8") as f:
             return f.read()
     except Exception as e:
-        logging.error(f"File Load Error: {e}")
+        logging.error(f"LPU knowledge file error: {e}")
         return ""
 
 # ------------------------------------------------------
@@ -45,9 +48,11 @@ def load_lpu_knowledge():
 # ------------------------------------------------------
 def load_admin_firestore_text():
     try:
-        docs = db.collection("lpu_content") \
-                 .where("type", "==", "text") \
-                 .stream()
+        docs = (
+            db.collection("lpu_content")
+            .where("type", "==", "text")
+            .stream()
+        )
 
         content = ""
         for doc in docs:
@@ -59,7 +64,7 @@ def load_admin_firestore_text():
         return content
 
     except Exception as e:
-        logging.error(f"Firestore Read Error: {e}")
+        logging.error(f"Firestore read error: {e}")
         return ""
 
 # ------------------------------------------------------
@@ -67,25 +72,21 @@ def load_admin_firestore_text():
 # ------------------------------------------------------
 def get_full_lpu_knowledge():
     return f"""
-===== OFFICIAL LPU RULES & REGULATIONS =====
+===== OFFICIAL LPU RULES, POLICIES & STUDENT WINGS =====
 {load_lpu_knowledge()}
 
-===== LATEST ADMIN UPDATES =====
+===== LATEST OFFICIAL ADMIN UPDATES =====
 {load_admin_firestore_text()}
 """
 
 # ------------------------------------------------------
-# WEATHER API
+# WEATHER (EDUCATIONAL UTILITY)
 # ------------------------------------------------------
 def clean_city(text):
-    text = re.sub(r"(weather|climate|temperature|in|at|of)", "", text, flags=re.I)
-    return text.strip()
+    return re.sub(r"(weather|climate|temperature|in|at|of)", "", text, flags=re.I).strip()
 
 def get_weather(city):
     try:
-        if not city:
-            return None
-
         geo = requests.get(
             f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
         ).json()
@@ -107,20 +108,16 @@ def get_weather(city):
         return (
             f"🌤 Weather in {r['name']}:\n"
             f"Temperature: {w['temperature']}°C\n"
-            f"Wind Speed: {w['windspeed']} km/h\n"
-            f"Time: {w['time']}"
+            f"Wind Speed: {w['windspeed']} km/h"
         )
-
-    except Exception as e:
-        logging.error(e)
+    except:
         return None
 
 # ------------------------------------------------------
-# WORLD TIME
+# WORLD TIME (EDUCATIONAL UTILITY)
 # ------------------------------------------------------
 def clean_time_city(text):
-    text = re.sub(r"(time|current|what|is|in)", "", text, flags=re.I)
-    return text.strip()
+    return re.sub(r"(time|current|what|is|in)", "", text, flags=re.I).strip()
 
 def get_time(city):
     try:
@@ -134,34 +131,56 @@ def get_time(city):
         r = geo["results"][0]
         now = datetime.now(pytz.timezone(r["timezone"]))
         return f"⏰ Current time in {r['name']}: {now.strftime('%Y-%m-%d %H:%M:%S')}"
-
-    except Exception as e:
-        logging.error(e)
+    except:
         return None
 
 # ------------------------------------------------------
-# AI REPLY (GEMINI)
+# GEMINI AI RESPONSE (STRICT EDUCATION MODE)
 # ------------------------------------------------------
 def ai_reply(user_message):
-    system_prompt = (
-        "You are the official AI Assistant for Lovely Professional University (LPU).\n"
-        "Answer ONLY using the verified LPU information below.\n"
-        "If information is missing, reply exactly:\n"
-        "'I don't have updated information on this.'\n\n"
-        f"{get_full_lpu_knowledge()}"
-    )
+    prompt = f"""
+You are the Official Educational AI Assistant for Lovely Professional University (LPU).
+
+PURPOSE:
+- You exist ONLY for education.
+- You must understand questions naturally like the Gemini app.
+- You answer academic, educational, and LPU-related queries only.
+
+YOU ARE ALLOWED TO ANSWER:
+- LPU academics, rules, policies, DSW, UCC, hostels, exams, attendance, fees
+- Student welfare and university procedures
+- General education questions (science, math, technology, coding, GK)
+- Career guidance related to education
+
+YOU ARE STRICTLY NOT ALLOWED TO ANSWER:
+- Entertainment (movies, songs, celebrities)
+- Politics (non-academic)
+- Personal opinions
+- Casual or irrelevant conversation
+
+RULES:
+- Answer ONLY using the verified information below.
+- If the question is NOT education-related, reply exactly:
+  "I am designed only for educational and LPU-related queries."
+- If information is missing, reply exactly:
+  "I don't have updated information on this."
+- Keep answers clear, professional, and student-friendly.
+
+VERIFIED INFORMATION:
+{get_full_lpu_knowledge()}
+
+STUDENT QUESTION:
+{user_message}
+"""
 
     try:
         response = client.models.generate_content(
             model="gemini-1.5-flash",
-            contents=[
-                {"role": "system", "parts": [{"text": system_prompt}]},
-                {"role": "user", "parts": [{"text": user_message}]},
-            ],
+            contents=prompt
         )
         return response.text
     except Exception as e:
-        logging.error(f"Gemini Error: {e}")
+        logging.error(f"Gemini error: {e}")
         return "AI service is temporarily unavailable."
 
 # ------------------------------------------------------
@@ -170,19 +189,19 @@ def ai_reply(user_message):
 def process_message(user_message):
     msg = user_message.lower()
 
-    if any(k in msg for k in ["who created you", "who made you"]):
-        return "I was developed by Sujith Lavudu for Lovely Professional University."
+    if any(k in msg for k in ["who created you", "who developed you", "who made you"]):
+        return "I was developed by Sujith Lavudu for Lovely Professional University (LPU)."
 
     if any(k in msg for k in ["weather", "temperature", "climate"]):
-        return get_weather(clean_city(msg)) or "Weather info not found."
+        return get_weather(clean_city(msg)) or "Weather information not found."
 
     if "time" in msg:
-        return get_time(clean_time_city(msg)) or "Time info not found."
+        return get_time(clean_time_city(msg)) or "Time information not found."
 
     return ai_reply(user_message)
 
 # ------------------------------------------------------
-# WHATSAPP SEND
+# SEND WHATSAPP MESSAGE
 # ------------------------------------------------------
 def send_message(to, text):
     url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
@@ -208,12 +227,11 @@ async def verify(request: Request):
     return "Invalid token"
 
 # ------------------------------------------------------
-# RECEIVE WHATSAPP
+# RECEIVE WHATSAPP MESSAGE
 # ------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
-
     try:
         msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
         sender = msg["from"]
@@ -222,11 +240,10 @@ async def webhook(request: Request):
         send_message(sender, reply)
     except Exception as e:
         logging.error(e)
-
     return {"status": "ok"}
 
 # ------------------------------------------------------
-# CHAT API FOR MOBILE / WEB
+# CHAT API (MOBILE / WEB APP)
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
@@ -235,5 +252,3 @@ async def chat_api(request: Request):
     if not message:
         return {"reply": "Please send a message."}
     return {"reply": process_message(message)}
-
-
