@@ -16,9 +16,10 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# GEMINI CLIENT (NEW SDK – CORRECT)
+# GEMINI CLIENT (STABLE + SUPPORTED)
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+model = client.models.get("gemini-1.0-pro")
 
 # ------------------------------------------------------
 # FIRESTORE INIT (Render Secret File Auth)
@@ -44,7 +45,7 @@ def load_lpu_knowledge():
         return ""
 
 # ------------------------------------------------------
-# LOAD ADMIN TEXT FROM FIRESTORE
+# LOAD ADMIN TEXT FROM FIRESTORE (FIXED SYNTAX)
 # ------------------------------------------------------
 def load_admin_firestore_text():
     try:
@@ -62,6 +63,7 @@ def load_admin_firestore_text():
             content += f"{title}:\n{text}\n\n"
 
         return content
+
     except Exception as e:
         logging.error(f"Firestore read error: {e}")
         return ""
@@ -137,16 +139,15 @@ def get_time(city):
         return None
 
 # ------------------------------------------------------
-# GEMINI AI RESPONSE (STRICT EDUCATION MODE)
+# GEMINI AI RESPONSE (EDUCATION-ONLY, STABLE)
 # ------------------------------------------------------
 def ai_reply(user_message):
     prompt = f"""
 You are the Official Educational AI Assistant for Lovely Professional University (LPU).
 
 RULES:
-- Answer ONLY education and LPU-related queries.
-- Understand questions naturally like the Gemini app.
-- Use ONLY verified information below.
+- Answer ONLY education and LPU-related queries
+- Use ONLY the verified information below
 - If not educational, reply exactly:
   "I am designed only for educational and LPU-related queries."
 - If info missing, reply exactly:
@@ -160,10 +161,7 @@ QUESTION:
 """
 
     try:
-        response = client.models.generate_content(
-            model="gemini-1.5-pro",
-            contents=prompt
-        )
+        response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
         logging.error(f"Gemini error: {e}")
@@ -218,6 +216,7 @@ async def verify(request: Request):
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
+
     try:
         entry = data.get("entry", [])
         if not entry:
@@ -228,15 +227,15 @@ async def webhook(request: Request):
             return {"status": "ignored"}
 
         value = changes[0].get("value", {})
-        messages = value.get("messages")
+        messages = value.get("messages", [])
         if not messages:
             return {"status": "ignored"}
 
         msg = messages[0]
-        sender = msg["from"]
+        sender = msg.get("from")
         text = msg.get("text", {}).get("body", "")
 
-        if text:
+        if sender and text:
             reply = process_message(text)
             send_message(sender, reply)
 
