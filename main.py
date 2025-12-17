@@ -16,12 +16,12 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# GEMINI CLIENT (CORRECT WAY – NEW SDK)
+# GEMINI CLIENT (NEW SDK – CORRECT)
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # ------------------------------------------------------
-# FIRESTORE INIT (Service Account via Render Secrets)
+# FIRESTORE INIT (Render Secret File Auth)
 # ------------------------------------------------------
 db = firestore.Client()
 
@@ -50,7 +50,7 @@ def load_admin_firestore_text():
     try:
         docs = (
             db.collection("lpu_content")
-            .where("type", "==", "text")
+            .where(filter=("type", "==", "text"))
             .stream()
         )
 
@@ -62,7 +62,6 @@ def load_admin_firestore_text():
             content += f"{title}:\n{text}\n\n"
 
         return content
-
     except Exception as e:
         logging.error(f"Firestore read error: {e}")
         return ""
@@ -83,12 +82,7 @@ def get_full_lpu_knowledge():
 # WEATHER (EDUCATIONAL UTILITY)
 # ------------------------------------------------------
 def clean_city(text):
-    return re.sub(
-        r"(weather|climate|temperature|in|at|of)",
-        "",
-        text,
-        flags=re.I
-    ).strip()
+    return re.sub(r"(weather|climate|temperature|in|at|of)", "", text, flags=re.I).strip()
 
 def get_weather(city):
     try:
@@ -117,20 +111,14 @@ def get_weather(city):
             f"Temperature: {w['temperature']}°C\n"
             f"Wind Speed: {w['windspeed']} km/h"
         )
-    except Exception as e:
-        logging.error(e)
+    except:
         return None
 
 # ------------------------------------------------------
 # WORLD TIME (EDUCATIONAL UTILITY)
 # ------------------------------------------------------
 def clean_time_city(text):
-    return re.sub(
-        r"(time|current|what|is|in)",
-        "",
-        text,
-        flags=re.I
-    ).strip()
+    return re.sub(r"(time|current|what|is|in)", "", text, flags=re.I).strip()
 
 def get_time(city):
     try:
@@ -145,50 +133,36 @@ def get_time(city):
         r = geo["results"][0]
         now = datetime.now(pytz.timezone(r["timezone"]))
         return f"⏰ Current time in {r['name']}: {now.strftime('%Y-%m-%d %H:%M:%S')}"
-    except Exception as e:
-        logging.error(e)
+    except:
         return None
 
 # ------------------------------------------------------
 # GEMINI AI RESPONSE (STRICT EDUCATION MODE)
 # ------------------------------------------------------
 def ai_reply(user_message):
-    system_prompt = f"""
+    prompt = f"""
 You are the Official Educational AI Assistant for Lovely Professional University (LPU).
 
-PURPOSE:
-- You exist ONLY for education.
-- You must understand questions naturally like the Gemini app.
-- You answer academic, educational, and LPU-related queries only.
-
-ALLOWED:
-- LPU academics, rules, policies, DSW, UCC, hostels, exams, attendance, fees
-- Student welfare and official university procedures
-- General education topics (science, math, technology, coding, GK)
-- Career guidance related to education
-
-NOT ALLOWED:
-- Entertainment, movies, songs
-- Non-academic politics
-- Personal opinions
-- Casual or irrelevant conversation
-
 RULES:
-- Use ONLY the verified information below.
-- If NOT educational, reply exactly:
+- Answer ONLY education and LPU-related queries.
+- Understand questions naturally like the Gemini app.
+- Use ONLY verified information below.
+- If not educational, reply exactly:
   "I am designed only for educational and LPU-related queries."
-- If info is missing, reply exactly:
+- If info missing, reply exactly:
   "I don't have updated information on this."
-- Keep answers professional, clear, and student-friendly.
 
 VERIFIED INFORMATION:
 {get_full_lpu_knowledge()}
+
+QUESTION:
+{user_message}
 """
 
     try:
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=[system_prompt, user_message],
+            model="gemini-1.5-pro",
+            contents=prompt
         )
         return response.text.strip()
     except Exception as e:
@@ -201,15 +175,8 @@ VERIFIED INFORMATION:
 def process_message(user_message):
     msg = user_message.lower()
 
-    if any(k in msg for k in [
-        "who created you",
-        "who developed you",
-        "who made you"
-    ]):
-        return (
-            "I was developed by Sujith Lavudu "
-            "for Lovely Professional University (LPU)."
-        )
+    if any(k in msg for k in ["who created you", "who developed you", "who made you"]):
+        return "I was developed by Sujith Lavudu for Lovely Professional University (LPU)."
 
     if any(k in msg for k in ["weather", "temperature", "climate"]):
         return get_weather(clean_city(msg)) or "Weather information not found."
@@ -246,23 +213,40 @@ async def verify(request: Request):
     return "Invalid token"
 
 # ------------------------------------------------------
-# RECEIVE WHATSAPP MESSAGE
+# RECEIVE WHATSAPP (SAFE HANDLING)
 # ------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
     try:
-        msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
+        entry = data.get("entry", [])
+        if not entry:
+            return {"status": "ignored"}
+
+        changes = entry[0].get("changes", [])
+        if not changes:
+            return {"status": "ignored"}
+
+        value = changes[0].get("value", {})
+        messages = value.get("messages")
+        if not messages:
+            return {"status": "ignored"}
+
+        msg = messages[0]
         sender = msg["from"]
         text = msg.get("text", {}).get("body", "")
-        reply = process_message(text)
-        send_message(sender, reply)
+
+        if text:
+            reply = process_message(text)
+            send_message(sender, reply)
+
     except Exception as e:
         logging.error(e)
+
     return {"status": "ok"}
 
 # ------------------------------------------------------
-# CHAT API (MOBILE / WEB APP)
+# CHAT API (APP / WEB)
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
