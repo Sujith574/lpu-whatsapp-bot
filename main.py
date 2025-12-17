@@ -16,11 +16,13 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# GEMINI CLIENT (STABLE + SUPPORTED)
+# GEMINI CLIENT (ONLY SUPPORTED MODEL)
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+GEMINI_MODEL = "gemini-1.5-flash-latest"
+
 # ------------------------------------------------------
-# FIRESTORE INIT (Render Secret File Auth)
+# FIRESTORE INIT
 # ------------------------------------------------------
 db = firestore.Client()
 
@@ -32,7 +34,7 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
 # ------------------------------------------------------
-# LOAD STATIC LPU KNOWLEDGE (GitHub file)
+# LOAD STATIC LPU KNOWLEDGE
 # ------------------------------------------------------
 def load_lpu_knowledge():
     try:
@@ -43,13 +45,13 @@ def load_lpu_knowledge():
         return ""
 
 # ------------------------------------------------------
-# LOAD ADMIN TEXT FROM FIRESTORE (FIXED SYNTAX)
+# LOAD ADMIN TEXT FROM FIRESTORE (CORRECT SYNTAX)
 # ------------------------------------------------------
 def load_admin_firestore_text():
     try:
         docs = (
             db.collection("lpu_content")
-            .where(filter=("type", "==", "text"))
+            .where("type", "==", "text")
             .stream()
         )
 
@@ -67,7 +69,7 @@ def load_admin_firestore_text():
         return ""
 
 # ------------------------------------------------------
-# COMBINED KNOWLEDGE BASE
+# COMBINED KNOWLEDGE
 # ------------------------------------------------------
 def get_full_lpu_knowledge():
     return f"""
@@ -79,7 +81,7 @@ def get_full_lpu_knowledge():
 """
 
 # ------------------------------------------------------
-# WEATHER (EDUCATIONAL UTILITY)
+# WEATHER (UTILITY)
 # ------------------------------------------------------
 def clean_city(text):
     return re.sub(r"(weather|climate|temperature|in|at|of)", "", text, flags=re.I).strip()
@@ -95,10 +97,8 @@ def get_weather(city):
             return None
 
         r = geo["results"][0]
-        lat, lon = r["latitude"], r["longitude"]
-
         weather = requests.get(
-            f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true",
+            f"https://api.open-meteo.com/v1/forecast?latitude={r['latitude']}&longitude={r['longitude']}&current_weather=true",
             timeout=10
         ).json()
 
@@ -115,7 +115,7 @@ def get_weather(city):
         return None
 
 # ------------------------------------------------------
-# WORLD TIME (EDUCATIONAL UTILITY)
+# WORLD TIME
 # ------------------------------------------------------
 def clean_time_city(text):
     return re.sub(r"(time|current|what|is|in)", "", text, flags=re.I).strip()
@@ -137,18 +137,17 @@ def get_time(city):
         return None
 
 # ------------------------------------------------------
-# GEMINI AI RESPONSE (EDUCATION-ONLY, STABLE)
+# GEMINI AI RESPONSE (EDUCATION ONLY)
 # ------------------------------------------------------
 def ai_reply(user_message):
     prompt = f"""
 You are the Official Educational AI Assistant for Lovely Professional University (LPU).
 
 RULES:
-- Answer ONLY education and LPU-related queries
-- Use ONLY the verified information below
-- If not educational, reply exactly:
+- Answer ONLY education and LPU-related queries.
+- If NOT educational, reply exactly:
   "I am designed only for educational and LPU-related queries."
-- If info missing, reply exactly:
+- If information is missing, reply exactly:
   "I don't have updated information on this."
 
 VERIFIED INFORMATION:
@@ -160,13 +159,14 @@ QUESTION:
 
     try:
         response = client.models.generate_content(
-            model="gemini-1.0-pro",
+            model=GEMINI_MODEL,
             contents=prompt
         )
         return response.text.strip()
     except Exception as e:
         logging.error(f"Gemini error: {e}")
         return "AI service is temporarily unavailable."
+
 # ------------------------------------------------------
 # MESSAGE PROCESSOR
 # ------------------------------------------------------
@@ -211,7 +211,7 @@ async def verify(request: Request):
     return "Invalid token"
 
 # ------------------------------------------------------
-# RECEIVE WHATSAPP (SAFE HANDLING)
+# RECEIVE WHATSAPP
 # ------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -245,7 +245,7 @@ async def webhook(request: Request):
     return {"status": "ok"}
 
 # ------------------------------------------------------
-# CHAT API (APP / WEB)
+# CHAT API
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
@@ -254,4 +254,3 @@ async def chat_api(request: Request):
     if not message:
         return {"reply": "Please send a message."}
     return {"reply": process_message(message)}
-
