@@ -7,7 +7,7 @@ import pytz
 import re
 
 from google.cloud import firestore
-import google.generativeai as genai
+from google import genai
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
@@ -242,3 +242,4 @@ async def chat_api(request: Request):
     if not message:
         return {"reply": "Please send a message."}
     return {"reply": process_message(message)}
+
