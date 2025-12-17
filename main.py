@@ -172,17 +172,28 @@ def process_message(user_message):
 # SEND WHATSAPP MESSAGE
 # ------------------------------------------------------
 def send_message(to, text):
-    url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
+    url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages" 
+
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
+
     payload = {
         "messaging_product": "whatsapp",
+        "recipient_type": "individual",
         "to": to,
-        "text": {"body": text}
+        "type": "text",
+        "text": {
+            "preview_url": False,
+            "body": text
+        }
     }
-    requests.post(url, json=payload, headers=headers, timeout=10)
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    logging.info(f"WhatsApp send status: {response.status_code}")
+    logging.info(f"WhatsApp response: {response.text}")
 
 # ------------------------------------------------------
 # VERIFY WEBHOOK
@@ -200,21 +211,33 @@ async def verify(request: Request):
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
+
     try:
         entry = data.get("entry", [])
         if not entry:
             return {"status": "ignored"}
-        value = entry[0]["changes"][0]["value"]
-        messages = value.get("messages", [])
-        if not messages:
+
+        changes = entry[0].get("changes", [])
+        if not changes:
             return {"status": "ignored"}
-        msg = messages[0]
+
+        value = changes[0].get("value", {})
+
+        # Ignore status updates
+        if "messages" not in value:
+            return {"status": "ignored"}
+
+        msg = value["messages"][0]
         sender = msg.get("from")
         text = msg.get("text", {}).get("body", "")
+
         if sender and text:
-            send_message(sender, process_message(text))
+            reply = process_message(text)
+            send_message(sender, reply)
+
     except Exception as e:
-        logging.error(e)
+        logging.error(f"Webhook error: {e}")
+
     return {"status": "ok"}
 
 # ------------------------------------------------------
@@ -227,3 +250,4 @@ async def chat_api(request: Request):
     if not message:
         return {"reply": "Please send a message."}
     return {"reply": process_message(message)}
+
