@@ -3,3 +3,4 @@ uvicorn
 requests
 pytz
 python-dotenv
+google-cloud-firestore
