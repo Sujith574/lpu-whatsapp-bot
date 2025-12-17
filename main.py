@@ -6,8 +6,15 @@ from datetime import datetime
 import pytz
 import re
 
+from google.cloud import firestore
+
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
+
+# ------------------------------------------------------
+# FIRESTORE INIT (Render uses service account automatically)
+# ------------------------------------------------------
+db = firestore.Client()
 
 # ------------------------------------------------------
 # ENVIRONMENT VARIABLES
@@ -21,26 +28,56 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-
 # ------------------------------------------------------
-# LOAD LPU KNOWLEDGE BASE
+# LOAD STATIC LPU KNOWLEDGE (FILE)
 # ------------------------------------------------------
 def load_lpu_knowledge():
     try:
         with open("lpu_knowledge.txt", "r", encoding="utf-8") as f:
             return f.read()
-    except:
-        return "LPU knowledge could not be loaded."
-
-LPU_KNOWLEDGE = load_lpu_knowledge()
-
+    except Exception as e:
+        logging.error(f"File Load Error: {e}")
+        return ""
 
 # ------------------------------------------------------
-# WEATHER API (Open-Meteo)
+# LOAD ADMIN TEXT FROM FIRESTORE
+# ------------------------------------------------------
+def load_admin_firestore_text():
+    try:
+        docs = db.collection("lpu_content") \
+                 .where("type", "==", "text") \
+                 .stream()
+
+        content = ""
+        for doc in docs:
+            data = doc.to_dict()
+            title = data.get("title", "")
+            text = data.get("textContent", "")
+            content += f"{title}:\n{text}\n\n"
+
+        return content
+
+    except Exception as e:
+        logging.error(f"Firestore Read Error: {e}")
+        return ""
+
+# ------------------------------------------------------
+# COMBINED KNOWLEDGE BASE
+# ------------------------------------------------------
+def get_full_lpu_knowledge():
+    return f"""
+===== OFFICIAL LPU RULES & REGULATIONS =====
+{load_lpu_knowledge()}
+
+===== LATEST ADMIN UPDATES =====
+{load_admin_firestore_text()}
+"""
+
+# ------------------------------------------------------
+# WEATHER API
 # ------------------------------------------------------
 def clean_city(text):
-    text = text.replace("weather", "").replace("climate", "").replace("temperature", "")
-    text = text.replace("in", "").replace("at", "").replace("of", "")
+    text = re.sub(r"(weather|climate|temperature|in|at|of)", "", text, flags=re.I)
     return text.strip()
 
 def get_weather(city):
@@ -48,93 +85,69 @@ def get_weather(city):
         if not city:
             return None
 
-        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
-        geo_res = requests.get(geo_url).json()
+        geo = requests.get(
+            f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
+        ).json()
 
-        if "results" not in geo_res:
+        if "results" not in geo:
             return None
 
-        result = geo_res["results"][0]
-        lat = result["latitude"]
-        lon = result["longitude"]
-        cname = result.get("name", city)
-        country = result.get("country", "")
+        r = geo["results"][0]
+        lat, lon = r["latitude"], r["longitude"]
 
-        weather_url = (
-            f"https://api.open-meteo.com/v1/forecast"
-            f"?latitude={lat}&longitude={lon}&current_weather=true"
-        )
+        weather = requests.get(
+            f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+        ).json()
 
-        weather_res = requests.get(weather_url).json()
-        if "current_weather" not in weather_res:
+        w = weather.get("current_weather")
+        if not w:
             return None
-
-        w = weather_res["current_weather"]
 
         return (
-            f"🌤 Weather in {cname}, {country}:\n"
+            f"🌤 Weather in {r['name']}:\n"
             f"Temperature: {w['temperature']}°C\n"
             f"Wind Speed: {w['windspeed']} km/h\n"
-            f"Conditions Time: {w['time']}"
+            f"Time: {w['time']}"
         )
 
     except Exception as e:
-        logging.error(f"Weather Error: {e}")
+        logging.error(e)
         return None
 
-
 # ------------------------------------------------------
-# WORLD TIME API
+# WORLD TIME
 # ------------------------------------------------------
 def clean_time_city(text):
-    text = text.replace("time", "").replace("current", "").replace("in", "")
-    text = text.replace("what", "").replace("is", "").strip()
-    return text
+    text = re.sub(r"(time|current|what|is|in)", "", text, flags=re.I)
+    return text.strip()
 
 def get_time(city):
     try:
-        if not city:
+        geo = requests.get(
+            f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
+        ).json()
+
+        if "results" not in geo:
             return None
 
-        geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
-        geo_res = requests.get(geo_url).json()
-
-        if "results" not in geo_res:
-            return None
-
-        result = geo_res["results"][0]
-        timezone = result.get("timezone")
-        cname = result.get("name", city)
-        country = result.get("country", "")
-
-        now_time = datetime.now(pytz.timezone(timezone))
-        formatted = now_time.strftime("%Y-%m-%d %H:%M:%S")
-
-        return f"⏰ Current time in {cname}, {country}: {formatted}"
+        r = geo["results"][0]
+        now = datetime.now(pytz.timezone(r["timezone"]))
+        return f"⏰ Current time in {r['name']}: {now.strftime('%Y-%m-%d %H:%M:%S')}"
 
     except Exception as e:
-        logging.error(f"Time Error: {e}")
+        logging.error(e)
         return None
 
-
 # ------------------------------------------------------
-# AI REPLY USING GROQ
+# AI REPLY (GROQ)
 # ------------------------------------------------------
-def ai_reply(user_message, lpu_data):
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
+def ai_reply(user_message):
     system_message = (
         "You are the official AI Assistant for Lovely Professional University (LPU).\n"
-        "You must answer using correct LPU rules, regulations, academics, hostel, "
-        "fees, RMS, attendance, discipline, and official procedures.\n"
-        "You also answer general education questions (UPSC, GK, science, etc.).\n"
-        "You must NEVER provide personal, illegal, explicit, or unsafe content.\n"
-        "You must NEVER say you are Bing or Microsoft.\n"
-        "Your identity is FIXED.\n\n"
-        f"Here is the complete LPU Knowledge Base:\n{lpu_data}"
+        "Answer ONLY using the verified information below.\n"
+        "If information is missing, say:\n"
+        "'I don't have updated information on this.'\n\n"
+        f"{get_full_lpu_knowledge()}"
     )
 
     payload = {
@@ -146,88 +159,37 @@ def ai_reply(user_message, lpu_data):
         "temperature": 0.2
     }
 
-    res = requests.post(GROQ_URL, json=payload, headers=headers, timeout=25).json()
-    logging.info(res)
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    res = requests.post(GROQ_URL, json=payload, headers=headers).json()
 
     if "choices" in res:
         return res["choices"][0]["message"]["content"]
 
-    if "error" in res:
-        return "AI backend error. Try again later."
-
-    return "Something went wrong. Try again."
-
+    return "AI backend error."
 
 # ------------------------------------------------------
-# SMART MESSAGE PROCESSOR
+# MESSAGE PROCESSOR
 # ------------------------------------------------------
 def process_message(user_message):
+    msg = user_message.lower()
 
-    msg = user_message.lower().strip()
+    if any(k in msg for k in ["who created you", "who made you"]):
+        return "I was developed by Sujith Lavudu for Lovely Professional University."
 
-    # -------------------------------
-    # 1) IDENTITY QUESTIONS
-    # -------------------------------
-    identity_keywords = [
-        "who created you", "who developed you", "who made you",
-        "your developer", "your creator", "who built you"
-    ]
+    if any(k in msg for k in ["weather", "temperature", "climate"]):
+        return get_weather(clean_city(msg)) or "Weather info not found."
 
-    if any(k in msg for k in identity_keywords):
-        return (
-            "I was developed by **Sujith Lavudu** for Lovely Professional University (LPU).\n\n"
-            "About Sujith Lavudu:\n"
-            "• Developer of AI Chatbots\n"
-            "• Student at Lovely Professional University\n"
-            "• From Visakhapatnam, Andhra Pradesh\n"
-            "• Skilled in Web Development, AI-driven Projects, and Cloud Technologies"
-        )
+    if "time" in msg:
+        return get_time(clean_time_city(msg)) or "Time info not found."
 
-    # -------------------------------
-    # 2) TRAINING / HOW YOU WORK?
-    # -------------------------------
-    training_keywords = [
-        "how did you train", "how were you trained", "how are you trained",
-        "how do you work", "how do you function", "how do you answer",
-        "how do you know things", "how do you get information",
-        "how did you get data", "how were you made"
-    ]
-
-    if any(k in msg for k in training_keywords):
-            return (
-    "I operate using built-in intelligence and predefined logic to understand questions, "
-    "analyze context, and generate accurate responses. My design focuses on assisting users "
-    "effectively without relying on external disclosures about internal systems or data sources."
-        )
-
-    # -------------------------------
-    # 3) WEATHER DETECTION
-    # -------------------------------
-    if any(w in msg for w in ["weather", "temperature", "climate", "rain"]):
-        city = clean_city(msg)
-        w = get_weather(city)
-        if w:
-            return w
-        return "I could not find weather information for that place."
-
-    # -------------------------------
-    # 4) WORLD TIME DETECTION
-    # -------------------------------
-    if "time" in msg or "current time" in msg or "local time" in msg:
-        city = clean_time_city(msg)
-        t = get_time(city)
-        if t:
-            return t
-        return "I could not find the time for that location."
-
-    # -------------------------------
-    # 5) DEFAULT → GROQ AI
-    # -------------------------------
-    return ai_reply(user_message, LPU_KNOWLEDGE)
-
+    return ai_reply(user_message)
 
 # ------------------------------------------------------
-# SEND MESSAGE
+# WHATSAPP SEND
 # ------------------------------------------------------
 def send_message(to, text):
     url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
@@ -240,11 +202,7 @@ def send_message(to, text):
         "to": to,
         "text": {"body": text}
     }
-    try:
-        requests.post(url, json=payload, headers=headers)
-    except Exception as e:
-        logging.error(f"Send Error: {e}")
-
+    requests.post(url, json=payload, headers=headers)
 
 # ------------------------------------------------------
 # VERIFY WEBHOOK
@@ -254,55 +212,33 @@ async def verify(request: Request):
     params = dict(request.query_params)
     if params.get("hub.verify_token") == VERIFY_TOKEN:
         return int(params.get("hub.challenge"))
-    return "Invalid verify token"
-
+    return "Invalid token"
 
 # ------------------------------------------------------
-# RECEIVE WHATSAPP MESSAGES
+# RECEIVE WHATSAPP
 # ------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
-    logging.info(data)
 
     try:
-        entry = data["entry"][0]
-        changes = entry["changes"][0]
-        value = changes["value"]
-
-        messages = value.get("messages", [])
-
-        if not messages:
-            return {"status": "ok"}
-
-        msg = messages[0]
+        msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
         sender = msg["from"]
         text = msg.get("text", {}).get("body", "")
-
         reply = process_message(text)
         send_message(sender, reply)
-
     except Exception as e:
-        logging.error(f"Webhook Error: {e}")
+        logging.error(e)
 
     return {"status": "ok"}
 
-
 # ------------------------------------------------------
-# CHAT API FOR MOBILE / WEB APP
+# CHAT API FOR MOBILE / WEB
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
-    try:
-        data = await request.json()
-        user_message = data.get("message", "")
-
-        if not user_message:
-            return {"reply": "Please send a message."}
-
-        reply = process_message(user_message)
-        return {"reply": reply}
-
-    except Exception as e:
-        logging.error(f"Chat API Error: {e}")
-        return {"reply": "Server error. Please try again."}
+    data = await request.json()
+    message = data.get("message", "")
+    if not message:
+        return {"reply": "Please send a message."}
+    return {"reply": process_message(message)}
