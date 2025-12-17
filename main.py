@@ -16,10 +16,10 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# GEMINI CLIENT (ONLY SUPPORTED MODEL)
+# GEMINI CLIENT (CONFIRMED WORKING MODEL)
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-GEMINI_MODEL = "gemini-1.5-flash-latest"
+GEMINI_MODEL = "models/gemini-2.5-flash"
 
 # ------------------------------------------------------
 # FIRESTORE INIT
@@ -45,25 +45,16 @@ def load_lpu_knowledge():
         return ""
 
 # ------------------------------------------------------
-# LOAD ADMIN TEXT FROM FIRESTORE (CORRECT SYNTAX)
+# LOAD ADMIN TEXT FROM FIRESTORE
 # ------------------------------------------------------
 def load_admin_firestore_text():
     try:
-        docs = (
-            db.collection("lpu_content")
-            .where("type", "==", "text")
-            .stream()
-        )
-
+        docs = db.collection("lpu_content").where("type", "==", "text").stream()
         content = ""
         for doc in docs:
             data = doc.to_dict()
-            title = data.get("title", "")
-            text = data.get("textContent", "")
-            content += f"{title}:\n{text}\n\n"
-
+            content += f"{data.get('title','')}:\n{data.get('textContent','')}\n\n"
         return content
-
     except Exception as e:
         logging.error(f"Firestore read error: {e}")
         return ""
@@ -81,7 +72,7 @@ def get_full_lpu_knowledge():
 """
 
 # ------------------------------------------------------
-# WEATHER (UTILITY)
+# WEATHER
 # ------------------------------------------------------
 def clean_city(text):
     return re.sub(r"(weather|climate|temperature|in|at|of)", "", text, flags=re.I).strip()
@@ -92,20 +83,16 @@ def get_weather(city):
             f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1",
             timeout=10
         ).json()
-
         if "results" not in geo:
             return None
-
         r = geo["results"][0]
         weather = requests.get(
             f"https://api.open-meteo.com/v1/forecast?latitude={r['latitude']}&longitude={r['longitude']}&current_weather=true",
             timeout=10
         ).json()
-
         w = weather.get("current_weather")
         if not w:
             return None
-
         return (
             f"🌤 Weather in {r['name']}:\n"
             f"Temperature: {w['temperature']}°C\n"
@@ -115,7 +102,7 @@ def get_weather(city):
         return None
 
 # ------------------------------------------------------
-# WORLD TIME
+# TIME
 # ------------------------------------------------------
 def clean_time_city(text):
     return re.sub(r"(time|current|what|is|in)", "", text, flags=re.I).strip()
@@ -126,10 +113,8 @@ def get_time(city):
             f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1",
             timeout=10
         ).json()
-
         if "results" not in geo:
             return None
-
         r = geo["results"][0]
         now = datetime.now(pytz.timezone(r["timezone"]))
         return f"⏰ Current time in {r['name']}: {now.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -156,7 +141,6 @@ VERIFIED INFORMATION:
 QUESTION:
 {user_message}
 """
-
     try:
         response = client.models.generate_content(
             model=GEMINI_MODEL,
@@ -216,32 +200,21 @@ async def verify(request: Request):
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
-
     try:
         entry = data.get("entry", [])
         if not entry:
             return {"status": "ignored"}
-
-        changes = entry[0].get("changes", [])
-        if not changes:
-            return {"status": "ignored"}
-
-        value = changes[0].get("value", {})
+        value = entry[0]["changes"][0]["value"]
         messages = value.get("messages", [])
         if not messages:
             return {"status": "ignored"}
-
         msg = messages[0]
         sender = msg.get("from")
         text = msg.get("text", {}).get("body", "")
-
         if sender and text:
-            reply = process_message(text)
-            send_message(sender, reply)
-
+            send_message(sender, process_message(text))
     except Exception as e:
         logging.error(e)
-
     return {"status": "ok"}
 
 # ------------------------------------------------------
