@@ -2,6 +2,8 @@ fastapi
 uvicorn
 requests
 pytz
+pypdf
+python-docx
 python-dotenv
 google-cloud-firestore
 google-genai
