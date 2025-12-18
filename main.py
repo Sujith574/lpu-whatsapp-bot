@@ -42,21 +42,20 @@ PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 # ------------------------------------------------------
 def handle_greeting(msg):
     greetings = ["hi", "hii", "hello", "hey", "hai", "namaste"]
-    if msg in greetings:
-        return (
-            "Namaste! 🙏\n\n"
-            "How can I assist you today?\n"
-            "You may ask questions related to *Lovely Professional University (LPU)*."
-        )
-    if any(g in msg for g in greetings):
+    if msg in greetings or any(g in msg for g in greetings):
         return (
             "Hello! 👋\n\n"
-            "Ask about *LPU exams, hostels, fees, attendance,* or education topics."
+            "I can help with:\n"
+            "• LPU information\n"
+            "• Exams & competitive prep (UPSC, JEE, NEET)\n"
+            "• General education & GK\n"
+            "• Weather, time, and more\n\n"
+            "Ask me anything 🙂"
         )
     return None
 
 # ------------------------------------------------------
-# STATIC KNOWLEDGE
+# STATIC LPU KNOWLEDGE
 # ------------------------------------------------------
 def load_lpu_knowledge():
     try:
@@ -96,53 +95,6 @@ def extract_text_from_file(file_url, file_type):
         return ""
 
 # ------------------------------------------------------
-# AI SUMMARY
-# ------------------------------------------------------
-def summarize_text(text):
-    if len(text) < 2000:
-        return text
-
-    prompt = f"""
-Summarize the following university notice.
-Keep only important rules, dates, and instructions.
-Use bullet points.
-
-TEXT:
-{text}
-"""
-    try:
-        res = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt
-        )
-        return res.text.strip()
-    except:
-        return text[:2000]
-
-# ------------------------------------------------------
-# CATEGORY CLASSIFICATION
-# ------------------------------------------------------
-def classify_category(text):
-    prompt = f"""
-Classify this LPU content into ONE category only:
-
-Exam, Hostel, Fees, Attendance, Placement, Discipline, General
-
-TEXT:
-{text}
-
-Return ONLY the category name.
-"""
-    try:
-        res = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt
-        )
-        return res.text.strip()
-    except:
-        return "General"
-
-# ------------------------------------------------------
 # LOAD ADMIN CONTENT (LATEST FIRST)
 # ------------------------------------------------------
 def load_admin_firestore_text():
@@ -166,7 +118,7 @@ def load_admin_firestore_text():
         return ""
 
 # ------------------------------------------------------
-# FULL KNOWLEDGE
+# FULL KNOWLEDGE BASE
 # ------------------------------------------------------
 def get_full_lpu_knowledge():
     return f"""
@@ -176,33 +128,48 @@ def get_full_lpu_knowledge():
 """
 
 # ------------------------------------------------------
-# WEATHER
+# WEATHER (MULTI-PHRASE)
 # ------------------------------------------------------
 def clean_city(text):
-    return re.sub(r"(weather|temperature|climate|in|at|of)", "", text, flags=re.I).strip()
+    return re.sub(
+        r"(weather|temperature|climate|forecast|in|at|of|today|now)",
+        "",
+        text,
+        flags=re.I
+    ).strip()
 
 def get_weather(city):
     try:
         geo = requests.get(
             f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
         ).json()
+
         r = geo["results"][0]
         w = requests.get(
-            f"https://api.open-meteo.com/v1/forecast?latitude={r['latitude']}&longitude={r['longitude']}&current_weather=true"
+            f"https://api.open-meteo.com/v1/forecast"
+            f"?latitude={r['latitude']}&longitude={r['longitude']}&current_weather=true"
         ).json()["current_weather"]
 
-        return f"🌤 Weather in {r['name']}:\n• {w['temperature']}°C, Wind {w['windspeed']} km/h"
+        return (
+            f"🌤 Weather in {r['name']}:\n"
+            f"• Temperature: {w['temperature']}°C\n"
+            f"• Wind Speed: {w['windspeed']} km/h"
+        )
     except:
         return None
 
 # ------------------------------------------------------
-# TIME
+# TIME (MULTI-PHRASE)
 # ------------------------------------------------------
+def clean_time_city(text):
+    return re.sub(r"(time|current|now|what|is|in|at)", "", text, flags=re.I).strip()
+
 def get_time(city):
     try:
         geo = requests.get(
             f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
         ).json()
+
         tz = geo["results"][0]["timezone"]
         now = datetime.now(pytz.timezone(tz))
         return f"⏰ Current time: {now.strftime('%H:%M:%S')}"
@@ -210,22 +177,28 @@ def get_time(city):
         return None
 
 # ------------------------------------------------------
-# AI ANSWER
+# AI ANSWER (UNIVERSAL EDUCATION BOT)
 # ------------------------------------------------------
 def ai_reply(msg):
     prompt = f"""
-You are the Official AI Assistant for Lovely Professional University (LPU).
+You are an EDUCATIONAL AI ASSISTANT.
 
-RULES:
-- User may type English or Hindi in English letters.
-- YOU MUST reply in ENGLISH only.
-- Use LPU information first.
-- Replies must be SHORT and professional.
+LANGUAGE RULES:
+- User may type English or Hindi written in English.
+- YOU MUST reply in ENGLISH ONLY.
 
-KNOWLEDGE:
+ANSWERING RULES:
+- If the question is about LPU → use LPU data first.
+- If NOT about LPU → answer using GENERAL EDUCATIONAL KNOWLEDGE.
+- Answer UPSC, GK, exams, careers, colleges, syllabus, concepts.
+- Keep answers SHORT, accurate, and student-friendly.
+- Use bullet points when helpful.
+- NEVER say you cannot answer general knowledge.
+
+LPU VERIFIED DATA:
 {get_full_lpu_knowledge()}
 
-QUESTION:
+USER QUESTION:
 {msg}
 """
     try:
@@ -235,30 +208,38 @@ QUESTION:
         )
         return r.text.strip()
     except:
-        return "AI service is temporarily unavailable."
+        return "Please try again in a moment."
 
 # ------------------------------------------------------
-# PROCESS MESSAGE
+# PROCESS MESSAGE (FINAL LOGIC)
 # ------------------------------------------------------
 def process_message(msg):
     text = msg.lower().strip()
 
+    # Greeting
     g = handle_greeting(text)
     if g:
         return g
 
-    if "weather" in text:
-        return get_weather(clean_city(text)) or "Weather not found."
-
-    if "time" in text:
-        return get_time(text) or "Time not found."
-
-    if any(k in text for k in ["who developed you", "who created you"]):
+    # Developer identity
+    if any(k in text for k in [
+        "who developed you", "who created you", "who made you",
+        "your developer", "your creator"
+    ]):
         return (
             "I was developed by *Sujith Lavudu and Vennela Barnana* "
-            "for Lovely Professional University (LPU)."
+            "for educational purposes."
         )
 
+    # Weather
+    if any(k in text for k in ["weather", "temperature", "climate"]):
+        return get_weather(clean_city(text)) or "Weather information not found."
+
+    # Time
+    if "time" in text or "current time" in text or "time now" in text:
+        return get_time(clean_time_city(text)) or "Time information not found."
+
+    # EVERYTHING ELSE → AI
     return ai_reply(msg)
 
 # ------------------------------------------------------
