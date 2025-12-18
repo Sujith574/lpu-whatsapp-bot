@@ -2,10 +2,6 @@ from fastapi import FastAPI, Request
 import requests
 import os
 import logging
-import re
-from datetime import datetime
-import pytz
-
 from google.cloud import firestore
 from google import genai
 
@@ -34,14 +30,14 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
 # ------------------------------------------------------
-# GREETINGS
+# GREETING HANDLER
 # ------------------------------------------------------
 def handle_greeting(msg: str):
-    greetings = ["hi", "hii", "hello", "hey", "hai", "namaste"]
+    greetings = ["hi", "hello", "hey", "hii", "hai", "namaste"]
     if msg in greetings or any(g in msg for g in greetings):
         return (
             "Hello! 👋\n\n"
-            "I can help you with:\n"
+            "I can assist you with:\n"
             "• LPU exams, hostels, fees, attendance\n"
             "• Education, GK, UPSC\n"
             "• Weather, date, and time\n\n"
@@ -57,6 +53,7 @@ def load_admin_lpu_content():
         docs = (
             db.collection("lpu_content")
             .order_by("updatedAt", direction=firestore.Query.DESCENDING)
+            .limit(20)
             .stream()
         )
 
@@ -64,9 +61,11 @@ def load_admin_lpu_content():
         for doc in docs:
             d = doc.to_dict()
             body = d.get("summary") or d.get("textContent") or ""
-            content += f"{d.get('title','')}:\n{body}\n\n"
+            if body:
+                content += f"{d.get('title','')}:\n{body}\n\n"
 
         return content.strip()
+
     except Exception as e:
         logging.error(e)
         return ""
@@ -76,9 +75,10 @@ def load_admin_lpu_content():
 # ------------------------------------------------------
 def is_lpu_question(msg: str) -> bool:
     keywords = [
-        "lpu", "lovely professional university", "ums", "attendance",
-        "exam", "hostel", "fee", "fees", "placement", "semester",
-        "registration", "reappear", "mid term", "end term"
+        "lpu", "lovely professional university", "ums",
+        "attendance", "exam", "hostel", "fee", "fees",
+        "placement", "semester", "registration",
+        "reappear", "mid term", "end term"
     ]
     msg = msg.lower()
     return any(k in msg for k in keywords)
@@ -88,16 +88,16 @@ def is_lpu_question(msg: str) -> bool:
 # ------------------------------------------------------
 def gemini_reply(user_message: str, lpu_context: str = "") -> str:
     prompt = f"""
-You are the Official AI Assistant.
+You are an Educational AI Assistant.
 
 RULES (STRICT):
-- Reply ONLY in ENGLISH.
-- Be short, accurate, and professional.
-- If LPU data is provided, prioritize it.
-- Never say you lack real-time access.
-- Answer confidently.
+- Reply ONLY in English
+- Keep replies short, accurate, and professional
+- If LPU data is provided, prioritize it
+- Never say you lack real-time or live access
+- Answer confidently
 
-LPU DATA (if any):
+LPU DATA (if available):
 {lpu_context}
 
 USER QUESTION:
@@ -125,17 +125,21 @@ def process_message(msg: str) -> str:
         return greeting
 
     # --------------------------------------------------
-    # OFFICIAL IDENTITIES (HIGHEST PRIORITY)
+    # BOT IDENTITY (HIGHEST PRIORITY)
     # --------------------------------------------------
     if any(k in text for k in [
         "who developed you", "who created you", "who made you",
-        "your developer", "your creator", "founder of this bot"
+        "your developer", "your creator", "founder of this bot",
+        "who built you"
     ]):
         return (
             "I was developed by Sujith Lavudu and Vennela Barnana "
             "for Lovely Professional University (LPU)."
         )
 
+    # --------------------------------------------------
+    # PERSON DETAILS (CREATORS)
+    # --------------------------------------------------
     if "sujith lavudu" in text:
         return (
             "Sujith Lavudu is a student innovator, software developer, and author.\n\n"
@@ -145,25 +149,22 @@ def process_message(msg: str) -> str:
 
     if "vennela barnana" in text or "vennela" in text:
         return (
-            "Vennela Barnana is an author, researcher, and co-creator of the "
-            "LPU Vertosewa AI Assistant.\n\n"
-            "She is the co-author of the book “Decode the Code” and works on "
+            "Vennela Barnana is an author and researcher.\n\n"
+            "She is the co-creator of the LPU Vertosewa AI Assistant and "
+            "co-author of the book “Decode the Code”, focusing on "
             "AI-driven educational initiatives."
         )
 
     # --------------------------------------------------
-    # LPU QUESTIONS → FIRESTORE FIRST
+    # LPU QUESTIONS → ADMIN DATA FIRST
     # --------------------------------------------------
     if is_lpu_question(msg):
         lpu_data = load_admin_lpu_content()
-        if lpu_data:
-            return gemini_reply(msg, lpu_data)
-        else:
-            return gemini_reply(msg)
+        return gemini_reply(msg, lpu_data if lpu_data else "")
 
     # --------------------------------------------------
     # EVERYTHING ELSE → GEMINI ONLY
-    # (Weather, Time, GK, UPSC, Education, People)
+    # (Weather, Time, Date, GK, UPSC, Education, People)
     # --------------------------------------------------
     return gemini_reply(msg)
 
@@ -216,7 +217,7 @@ async def webhook(request: Request):
     return {"status": "ok"}
 
 # ------------------------------------------------------
-# APP CHAT API (FLUTTER)
+# CHAT API (FLUTTER APP)
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
