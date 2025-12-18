@@ -3,13 +3,6 @@ import requests
 import os
 import logging
 import re
-from datetime import datetime
-import pytz
-import tempfile
-
-import pdfplumber
-from docx import Document
-
 from google.cloud import firestore
 from google import genai
 
@@ -20,7 +13,7 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# GEMINI
+# GEMINI CONFIG
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 GEMINI_MODEL = "models/gemini-2.5-flash"
@@ -38,66 +31,26 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
 # ------------------------------------------------------
-# GREETING
+# GREETINGS
 # ------------------------------------------------------
 def handle_greeting(msg):
     greetings = ["hi", "hii", "hello", "hey", "hai", "namaste"]
     if msg in greetings or any(g in msg for g in greetings):
         return (
             "Hello! 👋\n\n"
-            "I can help with:\n"
-            "• LPU information\n"
-            "• Exams & competitive prep (UPSC, JEE, NEET)\n"
-            "• General education & GK\n"
-            "• Weather, time, and more\n\n"
-            "Ask me anything 🙂"
+            "I am the Official AI Assistant for Lovely Professional University (LPU).\n"
+            "You may ask about:\n"
+            "• LPU academics & rules\n"
+            "• Exams, hostels, fees\n"
+            "• GK, UPSC & education\n"
+            "• Weather, date & time"
         )
     return None
 
 # ------------------------------------------------------
-# STATIC LPU KNOWLEDGE
+# LOAD LPU DATA (LATEST FIRST)
 # ------------------------------------------------------
-def load_lpu_knowledge():
-    try:
-        with open("lpu_knowledge.txt", "r", encoding="utf-8") as f:
-            return f.read()
-    except:
-        return ""
-
-# ------------------------------------------------------
-# FILE TEXT EXTRACTION
-# ------------------------------------------------------
-def extract_text_from_file(file_url, file_type):
-    try:
-        r = requests.get(file_url, timeout=20)
-        r.raise_for_status()
-
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            tmp.write(r.content)
-            path = tmp.name
-
-        text = ""
-
-        if file_type == "pdf":
-            with pdfplumber.open(path) as pdf:
-                for page in pdf.pages:
-                    text += page.extract_text() or ""
-
-        elif file_type in ["doc", "docx"]:
-            doc = Document(path)
-            for p in doc.paragraphs:
-                text += p.text + "\n"
-
-        return text.strip()
-
-    except Exception as e:
-        logging.error(f"Extraction error: {e}")
-        return ""
-
-# ------------------------------------------------------
-# LOAD ADMIN CONTENT (LATEST FIRST)
-# ------------------------------------------------------
-def load_admin_firestore_text():
+def load_lpu_data():
     try:
         docs = (
             db.collection("lpu_content")
@@ -108,112 +61,66 @@ def load_admin_firestore_text():
         content = ""
         for doc in docs:
             d = doc.to_dict()
-            body = d.get("summary") or d.get("textContent") or ""
-            content += f"{d.get('title','')} ({d.get('category','General')}):\n{body}\n\n"
+            text = d.get("summary") or d.get("textContent") or ""
+            title = d.get("title", "")
+            content += f"{title}:\n{text}\n\n"
 
-        return content
-
-    except Exception as e:
-        logging.error(e)
+        return content.lower()
+    except:
         return ""
 
 # ------------------------------------------------------
-# FULL KNOWLEDGE BASE
+# CHECK IF QUESTION IS LPU RELATED
 # ------------------------------------------------------
-def get_full_lpu_knowledge():
-    return f"""
-{load_lpu_knowledge()}
-
-{load_admin_firestore_text()}
-"""
-
-# ------------------------------------------------------
-# WEATHER (MULTI-PHRASE)
-# ------------------------------------------------------
-def clean_city(text):
-    return re.sub(
-        r"(weather|temperature|climate|forecast|in|at|of|today|now)",
-        "",
-        text,
-        flags=re.I
-    ).strip()
-
-def get_weather(city):
-    try:
-        geo = requests.get(
-            f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
-        ).json()
-
-        r = geo["results"][0]
-        w = requests.get(
-            f"https://api.open-meteo.com/v1/forecast"
-            f"?latitude={r['latitude']}&longitude={r['longitude']}&current_weather=true"
-        ).json()["current_weather"]
-
-        return (
-            f"🌤 Weather in {r['name']}:\n"
-            f"• Temperature: {w['temperature']}°C\n"
-            f"• Wind Speed: {w['windspeed']} km/h"
-        )
-    except:
-        return None
+def is_lpu_question(question: str):
+    lpu_keywords = [
+        "lpu", "lovely professional university", "ums",
+        "hostel", "attendance", "fee", "exam",
+        "mid term", "end term", "placement", "cgpa"
+    ]
+    q = question.lower()
+    return any(k in q for k in lpu_keywords)
 
 # ------------------------------------------------------
-# TIME (MULTI-PHRASE)
+# CHECK IF ANSWER EXISTS IN LPU DATA
 # ------------------------------------------------------
-def clean_time_city(text):
-    return re.sub(r"(time|current|now|what|is|in|at)", "", text, flags=re.I).strip()
-
-def get_time(city):
-    try:
-        geo = requests.get(
-            f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1"
-        ).json()
-
-        tz = geo["results"][0]["timezone"]
-        now = datetime.now(pytz.timezone(tz))
-        return f"⏰ Current time: {now.strftime('%H:%M:%S')}"
-    except:
-        return None
+def lpu_answer_exists(question: str, lpu_data: str):
+    words = [w for w in question.lower().split() if len(w) > 3]
+    return any(w in lpu_data for w in words)
 
 # ------------------------------------------------------
-# AI ANSWER (UNIVERSAL EDUCATION BOT)
+# GEMINI AI (UNIVERSAL)
 # ------------------------------------------------------
-def ai_reply(msg):
+def gemini_reply(user_message: str, lpu_context: str = ""):
     prompt = f"""
 You are an EDUCATIONAL AI ASSISTANT.
 
-LANGUAGE RULES:
-- User may type English or Hindi written in English.
-- YOU MUST reply in ENGLISH ONLY.
+STRICT RULES:
+- Reply in ENGLISH ONLY.
+- Answer confidently and accurately.
+- If LPU context is provided, use it first.
+- Never say you lack real-time access.
+- Keep responses short and professional.
 
-ANSWERING RULES:
-- If the question is about LPU → use LPU data first.
-- If NOT about LPU → answer using GENERAL EDUCATIONAL KNOWLEDGE.
-- Answer UPSC, GK, exams, careers, colleges, syllabus, concepts.
-- Keep answers SHORT, accurate, and student-friendly.
-- Use bullet points when helpful.
-- NEVER say you cannot answer general knowledge.
-
-LPU VERIFIED DATA:
-{get_full_lpu_knowledge()}
+LPU CONTEXT (use ONLY if relevant):
+{lpu_context}
 
 USER QUESTION:
-{msg}
+{user_message}
 """
     try:
-        r = client.models.generate_content(
+        response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt
         )
-        return r.text.strip()
+        return response.text.strip()
     except:
         return "Please try again in a moment."
 
 # ------------------------------------------------------
-# PROCESS MESSAGE (FINAL LOGIC)
+# PROCESS MESSAGE (CORE LOGIC)
 # ------------------------------------------------------
-def process_message(msg):
+def process_message(msg: str):
     text = msg.lower().strip()
 
     # Greeting
@@ -221,29 +128,29 @@ def process_message(msg):
     if g:
         return g
 
-    # Developer identity
+    # Developer identity (fixed response)
     if any(k in text for k in [
-        "who developed you", "who created you", "who made you",
-        "your developer", "your creator"
+        "who developed you", "who created you",
+        "who made you", "your developer"
     ]):
         return (
-            "I was developed by *Sujith Lavudu and Vennela Barnana* "
-            "for educational purposes."
+            "I was developed by Sujith Lavudu and Vennela Barnana "
+            "for Lovely Professional University (LPU)."
         )
 
-    # Weather
-    if any(k in text for k in ["weather", "temperature", "climate"]):
-        return get_weather(clean_city(text)) or "Weather information not found."
+    # LPU question
+    if is_lpu_question(msg):
+        lpu_data = load_lpu_data()
+        if lpu_answer_exists(msg, lpu_data):
+            return gemini_reply(msg, lpu_data)
+        else:
+            return gemini_reply(msg)
 
-    # Time
-    if "time" in text or "current time" in text or "time now" in text:
-        return get_time(clean_time_city(text)) or "Time information not found."
-
-    # EVERYTHING ELSE → AI
-    return ai_reply(msg)
+    # Non-LPU → Gemini directly
+    return gemini_reply(msg)
 
 # ------------------------------------------------------
-# SEND WHATSAPP
+# SEND WHATSAPP MESSAGE
 # ------------------------------------------------------
 def send_message(to, text):
     requests.post(
@@ -265,9 +172,9 @@ def send_message(to, text):
 # ------------------------------------------------------
 @app.get("/webhook")
 async def verify(request: Request):
-    p = dict(request.query_params)
-    if p.get("hub.verify_token") == VERIFY_TOKEN:
-        return int(p.get("hub.challenge"))
+    params = dict(request.query_params)
+    if params.get("hub.verify_token") == VERIFY_TOKEN:
+        return int(params.get("hub.challenge"))
     return "Invalid token"
 
 # ------------------------------------------------------
@@ -277,12 +184,14 @@ async def verify(request: Request):
 async def webhook(request: Request):
     data = await request.json()
     try:
-        v = data["entry"][0]["changes"][0]["value"]
-        if "messages" not in v:
+        value = data["entry"][0]["changes"][0]["value"]
+        if "messages" not in value:
             return {"status": "ignored"}
 
-        m = v["messages"][0]
-        send_message(m["from"], process_message(m["text"]["body"]))
+        msg = value["messages"][0]
+        reply = process_message(msg["text"]["body"])
+        send_message(msg["from"], reply)
+
     except Exception as e:
         logging.error(e)
 
@@ -293,5 +202,5 @@ async def webhook(request: Request):
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
-    d = await request.json()
-    return {"reply": process_message(d.get("message", ""))}
+    data = await request.json()
+    return {"reply": process_message(data.get("message", ""))}
