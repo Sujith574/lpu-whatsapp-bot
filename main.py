@@ -6,6 +6,12 @@ from google.cloud import firestore
 from google import genai
 
 # ------------------------------------------------------
+# REQUIRED: FIRESTORE CREDENTIALS
+# ------------------------------------------------------
+# Make sure serviceAccountKey.json exists in project root
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "serviceAccountKey.json"
+
+# ------------------------------------------------------
 # APP INIT
 # ------------------------------------------------------
 app = FastAPI()
@@ -18,7 +24,7 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 GEMINI_MODEL = "models/gemini-2.5-flash"
 
 # ------------------------------------------------------
-# FIRESTORE
+# FIRESTORE INIT
 # ------------------------------------------------------
 db = firestore.Client()
 
@@ -57,17 +63,18 @@ def load_admin_lpu_content():
             .stream()
         )
 
-        content = ""
+        content_blocks = []
         for doc in docs:
             d = doc.to_dict()
             body = d.get("summary") or d.get("textContent") or ""
+            title = d.get("title", "")
             if body:
-                content += f"{d.get('title','')}:\n{body}\n\n"
+                content_blocks.append(f"{title}:\n{body}")
 
-        return content.strip()
+        return "\n\n".join(content_blocks)
 
     except Exception as e:
-        logging.error(e)
+        logging.error(f"Firestore read error: {e}")
         return ""
 
 # ------------------------------------------------------
@@ -84,37 +91,37 @@ def is_lpu_question(msg: str) -> bool:
     return any(k in msg for k in keywords)
 
 # ------------------------------------------------------
-# GEMINI RESPONSE
+# GEMINI RESPONSE (SINGLE SOURCE FOR AI)
 # ------------------------------------------------------
 def gemini_reply(user_message: str, lpu_context: str = "") -> str:
     prompt = f"""
 You are an Educational AI Assistant.
 
-RULES (STRICT):
+STRICT RULES:
 - Reply ONLY in English
 - Keep replies short, accurate, and professional
 - If LPU data is provided, prioritize it
 - Never say you lack real-time or live access
-- Answer confidently
+- Answer confidently and clearly
 
-LPU DATA (if available):
+LPU DATA (if any):
 {lpu_context}
 
 USER QUESTION:
 {user_message}
 """
     try:
-        res = client.models.generate_content(
+        response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt
         )
-        return res.text.strip()
+        return response.text.strip()
     except Exception as e:
-        logging.error(e)
+        logging.error(f"Gemini error: {e}")
         return "The service is temporarily busy. Please try again."
 
 # ------------------------------------------------------
-# MESSAGE PROCESSOR
+# MESSAGE PROCESSOR (FINAL LOGIC)
 # ------------------------------------------------------
 def process_message(msg: str) -> str:
     text = msg.lower().strip()
@@ -138,7 +145,7 @@ def process_message(msg: str) -> str:
         )
 
     # --------------------------------------------------
-    # PERSON DETAILS (CREATORS)
+    # CREATOR DETAILS
     # --------------------------------------------------
     if "sujith lavudu" in text:
         return (
@@ -151,7 +158,7 @@ def process_message(msg: str) -> str:
         return (
             "Vennela Barnana is an author and researcher.\n\n"
             "She is the co-creator of the LPU Vertosewa AI Assistant and "
-            "co-author of the book “Decode the Code”, focusing on "
+            "co-author of the book “Decode the Code”, working on "
             "AI-driven educational initiatives."
         )
 
@@ -160,11 +167,11 @@ def process_message(msg: str) -> str:
     # --------------------------------------------------
     if is_lpu_question(msg):
         lpu_data = load_admin_lpu_content()
-        return gemini_reply(msg, lpu_data if lpu_data else "")
+        return gemini_reply(msg, lpu_data)
 
     # --------------------------------------------------
     # EVERYTHING ELSE → GEMINI ONLY
-    # (Weather, Time, Date, GK, UPSC, Education, People)
+    # (Weather, Date, Time, GK, UPSC, Education, People)
     # --------------------------------------------------
     return gemini_reply(msg)
 
@@ -212,7 +219,7 @@ async def webhook(request: Request):
         send_message(msg["from"], reply)
 
     except Exception as e:
-        logging.error(e)
+        logging.error(f"Webhook error: {e}")
 
     return {"status": "ok"}
 
@@ -221,5 +228,16 @@ async def webhook(request: Request):
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
-    data = await request.json()
-    return {"reply": process_message(data.get("message", ""))}
+    try:
+        data = await request.json()
+        user_msg = data.get("message", "")
+        logging.info(f"APP MESSAGE: {user_msg}")
+
+        reply = process_message(user_msg)
+        logging.info(f"APP REPLY: {reply}")
+
+        return {"reply": reply}
+
+    except Exception as e:
+        logging.error(f"CHAT API ERROR: {e}")
+        return {"reply": "Temporary server issue. Please try again."}
