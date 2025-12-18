@@ -6,9 +6,8 @@ from google.cloud import firestore
 from google import genai
 
 # ------------------------------------------------------
-# REQUIRED: FIRESTORE CREDENTIALS
+# FIRESTORE AUTH
 # ------------------------------------------------------
-# Make sure serviceAccountKey.json exists in project root
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
     "GOOGLE_APPLICATION_CREDENTIALS", "serviceAccountKey.json"
 )
@@ -20,13 +19,13 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# GEMINI CONFIG
+# GEMINI
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 GEMINI_MODEL = "models/gemini-2.5-flash"
 
 # ------------------------------------------------------
-# FIRESTORE INIT
+# FIRESTORE
 # ------------------------------------------------------
 db = firestore.Client()
 
@@ -38,92 +37,71 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
 # ------------------------------------------------------
-# GREETING HANDLER
+# GREETING
 # ------------------------------------------------------
 def handle_greeting(msg: str):
-    greetings = ["hi", "hello", "hey", "hii", "hai", "namaste"]
-    if msg in greetings or any(g in msg for g in greetings):
+    if any(w in msg for w in ["hi", "hello", "hey", "hii", "hai", "namaste"]):
         return (
             "Hello! 👋\n\n"
-            "I can assist you with:\n"
-            "• LPU exams, hostels, fees, attendance\n"
+            "You can ask about:\n"
+            "• LPU exams, attendance, hostels, fees\n"
             "• Education, GK, UPSC\n"
-            "• Weather, date, and time\n\n"
-            "Please ask your question."
+            "• Weather, date & time"
         )
     return None
 
 # ------------------------------------------------------
-# LOAD ADMIN LPU CONTENT (LATEST FIRST)
+# SEARCH LPU DATABASE (STRICT FIRST)
 # ------------------------------------------------------
-def load_admin_lpu_content():
+def search_lpu_database(question: str) -> str | None:
     try:
-        docs = (
-            db.collection("lpu_content")
-            .order_by("updatedAt", direction=firestore.Query.DESCENDING)
-            .limit(20)
-            .stream()
-        )
+        q = question.lower()
 
-        content_blocks = []
+        docs = db.collection("lpu_content").stream()
         for doc in docs:
             d = doc.to_dict()
-            body = d.get("summary") or d.get("textContent") or ""
-            title = d.get("title", "")
-            if body:
-                content_blocks.append(f"{title}:\n{body}")
+            text = (d.get("textContent") or "").lower()
+            title = (d.get("title") or "").lower()
+            keywords = [k.lower() for k in d.get("keywords", [])]
 
-        return "\n\n".join(content_blocks)
+            # keyword OR text match
+            if any(k in q for k in keywords) or q in text or q in title:
+                return d.get("textContent")
+
+        return None
 
     except Exception as e:
-        logging.error(f"Firestore read error: {e}")
-        return ""
+        logging.error(f"LPU SEARCH ERROR: {e}")
+        return None
 
 # ------------------------------------------------------
-# CHECK IF QUESTION IS ABOUT LPU
+# GEMINI FALLBACK
 # ------------------------------------------------------
-def is_lpu_question(msg: str) -> bool:
-    keywords = [
-        "lpu", "lovely professional university", "ums",
-        "attendance", "exam", "hostel", "fee", "fees",
-        "placement", "semester", "registration",
-        "reappear", "mid term", "end term"
-    ]
-    msg = msg.lower()
-    return any(k in msg for k in keywords)
-
-# ------------------------------------------------------
-# GEMINI RESPONSE (SINGLE SOURCE FOR AI)
-# ------------------------------------------------------
-def gemini_reply(user_message: str, lpu_context: str = "") -> str:
+def gemini_reply(user_message: str) -> str:
     prompt = f"""
 You are an Educational AI Assistant.
 
-STRICT RULES:
+RULES:
 - Reply ONLY in English
-- Keep replies short, accurate, and professional
-- If LPU data is provided, prioritize it
-- Never say you lack real-time or live access
-- Answer confidently and clearly
+- Keep replies short & professional
+- Never mention limitations
+- Answer clearly
 
-LPU DATA (if any):
-{lpu_context}
-
-USER QUESTION:
+QUESTION:
 {user_message}
 """
     try:
-        response = client.models.generate_content(
+        res = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt
         )
-        return response.text.strip()
+        return res.text.strip()
     except Exception as e:
-        logging.error(f"Gemini error: {e}")
-        return "The service is temporarily busy. Please try again."
+        logging.error(e)
+        return "The service is temporarily busy."
 
 # ------------------------------------------------------
-# MESSAGE PROCESSOR (FINAL LOGIC)
+# MESSAGE PROCESSOR (FINAL)
 # ------------------------------------------------------
 def process_message(msg: str) -> str:
     text = msg.lower().strip()
@@ -133,52 +111,34 @@ def process_message(msg: str) -> str:
     if greeting:
         return greeting
 
-    # --------------------------------------------------
-    # BOT IDENTITY (HIGHEST PRIORITY)
-    # --------------------------------------------------
-    if any(k in text for k in [
-        "who developed you", "who created you", "who made you",
-        "your developer", "your creator", "founder of this bot",
-        "who built you"
-    ]):
+    # Identity (hard-coded)
+    if "who developed you" in text:
         return (
             "I was developed by Sujith Lavudu and Vennela Barnana "
             "for Lovely Professional University (LPU)."
         )
 
-    # --------------------------------------------------
-    # CREATOR DETAILS
-    # --------------------------------------------------
-    if "sujith lavudu" in text:
+    # RMS FIX (HARDCODED — GUARANTEED)
+    if "rms" in text:
         return (
-            "Sujith Lavudu is a student innovator, software developer, and author.\n\n"
-            "He is the co-creator of the LPU Vertosewa AI Assistant and "
-            "co-author of the book “Decode the Code”."
-        )
-
-    if "vennela barnana" in text or "vennela" in text:
-        return (
-            "Vennela Barnana is an author and researcher.\n\n"
-            "She is the co-creator of the LPU Vertosewa AI Assistant and "
-            "co-author of the book “Decode the Code”, working on "
-            "AI-driven educational initiatives."
+            "At LPU, RMS stands for **Relationship Management System**. "
+            "It is used to manage student queries and institutional communication."
         )
 
     # --------------------------------------------------
-    # LPU QUESTIONS → ADMIN DATA FIRST
+    # LPU DATABASE → FIRST PRIORITY
     # --------------------------------------------------
-    if is_lpu_question(msg):
-        lpu_data = load_admin_lpu_content()
-        return gemini_reply(msg, lpu_data)
+    lpu_answer = search_lpu_database(text)
+    if lpu_answer:
+        return lpu_answer
 
     # --------------------------------------------------
-    # EVERYTHING ELSE → GEMINI ONLY
-    # (Weather, Date, Time, GK, UPSC, Education, People)
+    # GEMINI → ONLY IF NOT FOUND
     # --------------------------------------------------
     return gemini_reply(msg)
 
 # ------------------------------------------------------
-# SEND WHATSAPP MESSAGE
+# WHATSAPP SEND
 # ------------------------------------------------------
 def send_message(to: str, text: str):
     requests.post(
@@ -206,41 +166,24 @@ async def verify(request: Request):
     return "Invalid token"
 
 # ------------------------------------------------------
-# WEBHOOK RECEIVE (WHATSAPP)
+# WHATSAPP RECEIVE
 # ------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
     try:
-        value = data["entry"][0]["changes"][0]["value"]
-        if "messages" not in value:
-            return {"status": "ignored"}
-
-        msg = value["messages"][0]
+        msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
         reply = process_message(msg["text"]["body"])
         send_message(msg["from"], reply)
-
     except Exception as e:
-        logging.error(f"Webhook error: {e}")
-
+        logging.error(e)
     return {"status": "ok"}
 
 # ------------------------------------------------------
-# CHAT API (FLUTTER APP)
+# FLUTTER CHAT API
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
-    try:
-        data = await request.json()
-        user_msg = data.get("message", "")
-        logging.info(f"APP MESSAGE: {user_msg}")
-
-        reply = process_message(user_msg)
-        logging.info(f"APP REPLY: {reply}")
-
-        return {"reply": reply}
-
-    except Exception as e:
-        logging.error(f"CHAT API ERROR: {e}")
-        return {"reply": "Temporary server issue. Please try again."}
-
+    data = await request.json()
+    reply = process_message(data.get("message", ""))
+    return {"reply": reply}
