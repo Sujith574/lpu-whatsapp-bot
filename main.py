@@ -19,7 +19,7 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# GEMINI
+# GEMINI CONFIG
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 GEMINI_MODEL = "models/gemini-2.5-flash"
@@ -37,58 +37,82 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
 # ------------------------------------------------------
-# GREETING
+# LOAD LPU KNOWLEDGE FILE
 # ------------------------------------------------------
-def handle_greeting(msg: str):
-    if any(w in msg for w in ["hi", "hello", "hey", "hii", "hai", "namaste"]):
-        return (
-            "Hello! 👋\n\n"
-            "You can ask about:\n"
-            "• LPU exams, attendance, hostels, fees\n"
-            "• Education, GK, UPSC\n"
-            "• Weather, date & time"
-        )
-    return None
-
-# ------------------------------------------------------
-# SEARCH LPU DATABASE (STRICT FIRST)
-# ------------------------------------------------------
-def search_lpu_database(question: str) -> str | None:
+def load_lpu_knowledge():
     try:
-        q = question.lower()
+        with open("lpu_knowledge.txt", "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        logging.error(f"LPU TXT ERROR: {e}")
+        return ""
 
+# ------------------------------------------------------
+# SMART SEARCH IN TXT (SEMANTIC-LIKE)
+# ------------------------------------------------------
+def search_lpu_txt(question: str) -> str | None:
+    content = load_lpu_knowledge()
+    q_words = set(question.lower().split())
+
+    best_match = ""
+    best_score = 0
+
+    for block in content.split("\n\n"):
+        block_lower = block.lower()
+        score = sum(1 for w in q_words if w in block_lower)
+
+        if score > best_score and score >= 2:
+            best_score = score
+            best_match = block.strip()
+
+    return best_match if best_match else None
+
+# ------------------------------------------------------
+# SMART SEARCH IN FIRESTORE
+# ------------------------------------------------------
+def search_lpu_firestore(question: str) -> str | None:
+    q_words = set(question.lower().split())
+
+    try:
         docs = db.collection("lpu_content").stream()
+
+        best_match = ""
+        best_score = 0
+
         for doc in docs:
             d = doc.to_dict()
             text = (d.get("textContent") or "").lower()
             title = (d.get("title") or "").lower()
-            keywords = [k.lower() for k in d.get("keywords", [])]
+            keywords = " ".join(d.get("keywords", [])).lower()
 
-            # keyword OR text match
-            if any(k in q for k in keywords) or q in text or q in title:
-                return d.get("textContent")
+            combined = f"{title} {text} {keywords}"
 
-        return None
+            score = sum(1 for w in q_words if w in combined)
+
+            if score > best_score and score >= 2:
+                best_score = score
+                best_match = d.get("textContent")
+
+        return best_match if best_match else None
 
     except Exception as e:
-        logging.error(f"LPU SEARCH ERROR: {e}")
+        logging.error(f"FIRESTORE SEARCH ERROR: {e}")
         return None
 
 # ------------------------------------------------------
-# GEMINI FALLBACK
+# GEMINI (FINAL FALLBACK)
 # ------------------------------------------------------
-def gemini_reply(user_message: str) -> str:
+def gemini_reply(question: str) -> str:
     prompt = f"""
-You are an Educational AI Assistant.
+You are an intelligent educational assistant.
 
-RULES:
+Rules:
 - Reply ONLY in English
-- Keep replies short & professional
-- Never mention limitations
-- Answer clearly
+- Be clear, confident, and accurate
+- Answer naturally like a human tutor
 
-QUESTION:
-{user_message}
+Question:
+{question}
 """
     try:
         res = client.models.generate_content(
@@ -96,49 +120,53 @@ QUESTION:
             contents=prompt
         )
         return res.text.strip()
-    except Exception as e:
-        logging.error(e)
-        return "The service is temporarily busy."
+    except Exception:
+        return "The service is temporarily unavailable."
 
 # ------------------------------------------------------
-# MESSAGE PROCESSOR (FINAL)
+# MESSAGE PROCESSOR (UNIVERSAL LOGIC)
 # ------------------------------------------------------
 def process_message(msg: str) -> str:
     text = msg.lower().strip()
 
     # Greeting
-    greeting = handle_greeting(text)
-    if greeting:
-        return greeting
+    if any(w in text for w in ["hi", "hello", "hey", "hii", "hai", "namaste"]):
+        return (
+            "Hello! 👋\n\n"
+            "You can ask about:\n"
+            "• LPU exams, attendance, hostels, fees\n"
+            "• Education, GK, UPSC\n"
+            "• Weather, date & time"
+        )
 
-    # Identity (hard-coded)
-    if "who developed you" in text:
+    # Developer info (allowed hard-code)
+    if "who developed you" in text or "who created you" in text:
         return (
             "I was developed by Sujith Lavudu and Vennela Barnana "
             "for Lovely Professional University (LPU)."
         )
 
-    # RMS FIX (HARDCODED — GUARANTEED)
-    if "rms" in text:
-        return (
-            "At LPU, RMS stands for **Relationship Management System**. "
-            "It is used to manage student queries and institutional communication."
-        )
+    # --------------------------------------------------
+    # 1️⃣ SEARCH LPU TXT
+    # --------------------------------------------------
+    txt_answer = search_lpu_txt(msg)
+    if txt_answer:
+        return txt_answer
 
     # --------------------------------------------------
-    # LPU DATABASE → FIRST PRIORITY
+    # 2️⃣ SEARCH FIRESTORE
     # --------------------------------------------------
-    lpu_answer = search_lpu_database(text)
-    if lpu_answer:
-        return lpu_answer
+    fs_answer = search_lpu_firestore(msg)
+    if fs_answer:
+        return fs_answer
 
     # --------------------------------------------------
-    # GEMINI → ONLY IF NOT FOUND
+    # 3️⃣ GEMINI FINAL FALLBACK
     # --------------------------------------------------
     return gemini_reply(msg)
 
 # ------------------------------------------------------
-# WHATSAPP SEND
+# SEND WHATSAPP MESSAGE
 # ------------------------------------------------------
 def send_message(to: str, text: str):
     requests.post(
@@ -166,7 +194,7 @@ async def verify(request: Request):
     return "Invalid token"
 
 # ------------------------------------------------------
-# WHATSAPP RECEIVE
+# WHATSAPP WEBHOOK
 # ------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request):
