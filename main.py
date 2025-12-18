@@ -9,7 +9,9 @@ from google import genai
 # REQUIRED: FIRESTORE CREDENTIALS
 # ------------------------------------------------------
 # Make sure serviceAccountKey.json exists in project root
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "serviceAccountKey.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
+    "GOOGLE_APPLICATION_CREDENTIALS", "serviceAccountKey.json"
+)
 
 # ------------------------------------------------------
 # APP INIT
@@ -241,3 +243,4 @@ async def chat_api(request: Request):
     except Exception as e:
         logging.error(f"CHAT API ERROR: {e}")
         return {"reply": "Temporary server issue. Please try again."}
+
