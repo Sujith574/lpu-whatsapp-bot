@@ -127,60 +127,55 @@ QUESTION:
 def process_message(msg: str) -> str:
     text = msg.lower().strip()
 
-    # ---------------- GREETING ----------------
-    if any(g in text for g in ["hi", "hello", "hey", "hii", "hai", "namaste"]):
-        return (
-            "Hello! 👋\n\n"
-            "You can ask about:\n"
-            "• LPU exams, attendance, hostels, fees\n"
-            "• Education, GK, UPSC\n"
-            "• Weather, date & time"
-        )
+    # 1️⃣ Greeting
+    greeting = handle_greeting(text)
+    if greeting:
+        return greeting
 
-    # ---------------- BOT IDENTITY ----------------
-    if any(k in text for k in ["who developed you", "who created you", "who built you"]):
+    # 2️⃣ Bot identity (highest priority)
+    if any(k in text for k in [
+        "who developed you", "who created you", "who made you",
+        "your developer", "your creator", "founder of this bot",
+        "who built you"
+    ]):
         return (
             "I was developed by Sujith Lavudu and Vennela Barnana "
             "for Lovely Professional University (LPU)."
         )
 
-    # ---------------- PERSON DETAILS ----------------
+    # 3️⃣ Creator details
     if "sujith lavudu" in text:
         return (
             "Sujith Lavudu is a student innovator, software developer, and author. "
             "He is the co-creator of the LPU Vertosewa AI Assistant and "
-            "co-author of the book “Decode the Code”."
+            "co-author of the book 'Decode the Code'."
         )
 
     if "vennela barnana" in text or "vennela" in text:
         return (
             "Vennela Barnana is an author and researcher. "
             "She is the co-creator of the LPU Vertosewa AI Assistant and "
-            "co-author of the book “Decode the Code”."
+            "co-author of the book 'Decode the Code', working on "
+            "AI-driven educational initiatives."
         )
 
-    # ---------------- LPU QUESTIONS ----------------
+    # 4️⃣ LPU QUESTIONS → STRICT LPU FIRST
     if is_lpu_question(msg):
-    lpu_answer = find_lpu_answer(msg)
+        lpu_answer = load_admin_lpu_content()
 
-    if lpu_answer.strip():
-        # STRICT: Gemini can ONLY use LPU data
-        return gemini_reply(
-            msg,
-            f"Answer strictly from the following verified LPU information:\n{lpu_answer}"
-        )
+        if lpu_answer.strip():
+            # Gemini is ONLY allowed to use LPU data here
+            return gemini_reply(
+                msg,
+                f"Answer strictly from the following verified LPU information:\n{lpu_answer}"
+            )
 
-    # No LPU data found → Gemini fallback
+        # No LPU data found → Gemini fallback
+        return gemini_reply(msg)
+
+    # 5️⃣ EVERYTHING ELSE → GEMINI ONLY
+    # (UPSC, GK, people, weather, date, time, general education)
     return gemini_reply(msg)
-
-    # ---------------- DATE / TIME ----------------
-    if "time" in text or "date" in text:
-        now = datetime.now(pytz.timezone("Asia/Kolkata"))
-        return f"Current date and time: {now.strftime('%d %B %Y, %I:%M %p')}"
-
-    # ---------------- EVERYTHING ELSE ----------------
-    return gemini_reply(msg)
-
 # ------------------------------------------------------
 # CHAT API (FLUTTER + WEB)
 # ------------------------------------------------------
@@ -189,3 +184,4 @@ async def chat_api(request: Request):
     data = await request.json()
     message = data.get("message", "")
     return {"reply": process_message(message)}
+
