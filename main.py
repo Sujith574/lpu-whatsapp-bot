@@ -1,13 +1,13 @@
 from fastapi import FastAPI, Request
 import os
 import logging
-import requests
+from datetime import datetime
+import pytz
 from google.cloud import firestore
 from google import genai
-from difflib import SequenceMatcher
 
 # ------------------------------------------------------
-# GOOGLE CREDENTIALS (Render compatible)
+# GOOGLE CREDENTIALS
 # ------------------------------------------------------
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
     "GOOGLE_APPLICATION_CREDENTIALS", "/etc/secrets/serviceAccountKey.json"
@@ -31,13 +31,6 @@ GEMINI_MODEL = "models/gemini-2.5-flash"
 db = firestore.Client()
 
 # ------------------------------------------------------
-# ENV (WhatsApp)
-# ------------------------------------------------------
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
-PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
-
-# ------------------------------------------------------
 # LOAD STATIC LPU KNOWLEDGE
 # ------------------------------------------------------
 def load_lpu_knowledge():
@@ -47,190 +40,113 @@ def load_lpu_knowledge():
     except:
         return ""
 
-STATIC_LPU = load_lpu_knowledge()
+STATIC_LPU_KNOWLEDGE = load_lpu_knowledge()
 
 # ------------------------------------------------------
 # LOAD ADMIN CONTENT
 # ------------------------------------------------------
 def load_admin_lpu_content():
+    content = ""
     try:
-        docs = (
-            db.collection("lpu_content")
-            .order_by("updatedAt", direction=firestore.Query.DESCENDING)
-            .limit(25)
-            .stream()
-        )
-
-        blocks = []
+        docs = db.collection("lpu_content").stream()
         for doc in docs:
             d = doc.to_dict()
             body = d.get("summary") or d.get("textContent") or ""
             if body:
-                blocks.append(f"{d.get('title','')}:\n{body}")
-
-        return "\n\n".join(blocks)
-
+                content += body + "\n"
     except Exception as e:
         logging.error(e)
-        return ""
+    return content
 
 # ------------------------------------------------------
-# GREETING
+# SMART LPU SEARCH
 # ------------------------------------------------------
-def handle_greeting(text):
-    greetings = ["hi", "hello", "hey", "hii", "hai", "namaste"]
-    if text in greetings or any(g in text for g in greetings):
-        return (
-            "Hello! 👋\n\n"
-            "You can ask me about:\n"
-            "• LPU academics & notices\n"
-            "• Exams, hostels, fees, attendance\n"
-            "• UPSC, GK, education\n"
-            "• Weather, date & time"
-        )
-    return None
+def search_lpu_sources(question: str) -> str:
+    q = question.lower()
 
-# ------------------------------------------------------
-# LPU QUESTION CHECK
-# ------------------------------------------------------
-def is_lpu_question(text):
-    keywords = [
-        "lpu", "lovely professional university", "ums", "rms",
-        "attendance", "exam", "hostel", "fee", "fees",
-        "placement", "semester", "registration",
-        "reappear", "mid term", "end term"
-    ]
-    return any(k in text for k in keywords)
+    # 1️⃣ Search static knowledge
+    for line in STATIC_LPU_KNOWLEDGE.split("\n"):
+        if any(word in line.lower() for word in q.split()):
+            return line
 
-# ------------------------------------------------------
-# SMART LPU MATCHING
-# ------------------------------------------------------
-def find_lpu_answer(question):
-    combined = STATIC_LPU + "\n" + load_admin_lpu_content()
-    question = question.lower()
+    # 2️⃣ Search admin uploads
+    admin_data = load_admin_lpu_content()
+    for line in admin_data.split("\n"):
+        if any(word in line.lower() for word in q.split()):
+            return line
 
-    best, score = "", 0
-    for para in combined.split("\n\n"):
-        s = SequenceMatcher(None, question, para.lower()).ratio()
-        if s > score:
-            score = s
-            best = para
-
-    return best if score > 0.35 else ""
+    return ""
 
 # ------------------------------------------------------
 # GEMINI FALLBACK
 # ------------------------------------------------------
-def gemini_reply(question):
+def gemini_reply(question: str):
     prompt = f"""
-You are an educational AI assistant.
-
-Rules:
-- Reply ONLY in English
-- Be short, accurate, professional
-- Never mention limitations or sources
+Answer the following question clearly and professionally.
 
 Question:
 {question}
 """
     try:
-        r = client.models.generate_content(
+        res = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt
         )
-        return r.text.strip()
-    except Exception as e:
-        logging.error(e)
-        return "Please try again."
+        return res.text.strip()
+    except:
+        return "Temporary service issue. Please try again."
 
 # ------------------------------------------------------
-# CORE LOGIC
+# MESSAGE PROCESSOR
 # ------------------------------------------------------
-def process_message(msg):
-    text = msg.lower().strip()
+def process_message(msg: str) -> str:
+    text = msg.strip()
 
-    g = handle_greeting(text)
-    if g:
-        return g
-
-    if any(k in text for k in [
-        "who developed you", "who created you", "who made you", "who built you"
-    ]):
+    # Greeting
+    if text.lower() in ["hi", "hello", "hey", "hii", "hai"]:
         return (
-            "I was developed by Sujith Lavudu and Vennela Barnana "
-            "for Lovely Professional University (LPU)."
+            "Hello! 👋\n\n"
+            "You can ask about:\n"
+            "• LPU exams, RMS, UMS, hostels, fees\n"
+            "• Education, GK, UPSC\n"
+            "• Date, time, weather"
         )
 
-    if "sujith lavudu" in text:
+    # Date & Time
+    if "time" in text.lower():
+        return datetime.now(pytz.timezone("Asia/Kolkata")).strftime("Time: %I:%M %p")
+
+    if "date" in text.lower():
+        return datetime.now(pytz.timezone("Asia/Kolkata")).strftime("Date: %d %B %Y")
+
+    # Creator info
+    if "sujith lavudu" in text.lower():
         return (
-            "Sujith Lavudu is a student innovator, software developer, and author. "
-            "He is the co-creator of the LPU Vertosewa AI Assistant."
+            "Sujith Lavudu is a student innovator, software developer, "
+            "co-creator of LPU Vertosewa AI Assistant, and co-author of "
+            "the book 'Decode the Code'."
         )
 
-    if "vennela barnana" in text or "vennela" in text:
+    if "vennela barnana" in text.lower():
         return (
-            "Vennela Barnana is an author and researcher, and the co-creator "
-            "of the LPU Vertosewa AI Assistant."
+            "Vennela Barnana is an author and researcher, co-creator of "
+            "LPU Vertosewa AI Assistant, and co-author of 'Decode the Code'."
         )
 
-    if is_lpu_question(text):
-        ans = find_lpu_answer(text)
-        if ans:
-            return ans
+    # 🔴 LPU FIRST (STRICT)
+    lpu_answer = search_lpu_sources(text)
+    if lpu_answer:
+        return lpu_answer
 
-    return gemini_reply(msg)
+    # 🔵 Gemini fallback (UPSC, GK, people, general)
+    return gemini_reply(text)
 
 # ------------------------------------------------------
-# CHAT API (Flutter)
+# CHAT API (FLUTTER APP)
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
     data = await request.json()
-    return {"reply": process_message(data.get("message", ""))}
-
-# ------------------------------------------------------
-# WHATSAPP VERIFY
-# ------------------------------------------------------
-@app.get("/webhook")
-async def verify(request: Request):
-    p = dict(request.query_params)
-    if p.get("hub.verify_token") == VERIFY_TOKEN:
-        return int(p.get("hub.challenge"))
-    return "Invalid token"
-
-# ------------------------------------------------------
-# WHATSAPP RECEIVE
-# ------------------------------------------------------
-@app.post("/webhook")
-async def webhook(request: Request):
-    data = await request.json()
-
-    try:
-        value = data["entry"][0]["changes"][0]["value"]
-        if "messages" not in value:
-            return {"status": "ignored"}
-
-        msg = value["messages"][0]
-        sender = msg["from"]
-        text = msg["text"]["body"]
-
-        reply = process_message(text)
-
-        requests.post(
-            f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages",
-            headers={
-                "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "messaging_product": "whatsapp",
-                "to": sender,
-                "type": "text",
-                "text": {"body": reply},
-            },
-        )
-
-    except Exception as e:
-        logging.error(e)
-
-    return {"status": "ok"}
+    msg = data.get("message", "")
+    reply = process_message(msg)
+    return {"reply": reply}
