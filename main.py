@@ -128,31 +128,46 @@ QUESTION:
 def process_message(msg: str) -> str:
     text = msg.lower().strip()
 
-    # Greeting
+    # 1️⃣ FIXED IDENTITY RESPONSES (TOP PRIORITY)
+    if "sujith lavudu" in text:
+        return (
+            "Sujith Lavudu is a student innovator, software developer, and author. "
+            "He is the co-creator of the LPU Vertosewa AI Assistant "
+            "and co-author of the book 'Decode the Code'."
+        )
+
+    if "vennela barnana" in text or "vennela" in text:
+        return (
+            "Vennela Barnana is an author and researcher. "
+            "She is the co-creator of the LPU Vertosewa AI Assistant "
+            "and co-author of the book 'Decode the Code'."
+        )
+
+    # 2️⃣ GREETING
     greet = handle_greeting(text)
     if greet:
         return greet
 
-    # Date / Time
+    # 3️⃣ DATE / TIME
     if "time" in text or "date" in text:
         ist = pytz.timezone("Asia/Kolkata")
         now = datetime.now(ist)
         return f"📅 Date: {now.strftime('%d %B %Y')}\n⏰ Time: {now.strftime('%I:%M %p')} (IST)"
 
-    # Identity
-    if "who developed you" in text or "who created you" in text:
+    # 4️⃣ BOT IDENTITY
+    if any(k in text for k in ["who developed you", "who created you", "your creator", "your developer"]):
         return (
             "I was developed by Sujith Lavudu and Vennela Barnana "
             "for Lovely Professional University (LPU)."
         )
 
-    # LPU Queries
+    # 5️⃣ LPU QUESTIONS
     LPU_KEYWORDS = [
         "lpu", "lovely professional university",
-        "ums", "rms", "attendance", "hostel",
-        "fee", "fees", "semester",
-        "registration", "reappear",
-        "mid term", "end term"
+        "ums", "rms",
+        "attendance", "hostel", "fee", "fees",
+        "semester", "registration",
+        "reappear", "mid term", "end term"
     ]
 
     if any(k in text for k in LPU_KEYWORDS):
@@ -160,7 +175,7 @@ def process_message(msg: str) -> str:
         context = STATIC_LPU + "\n\n" + admin_data
         return gemini_reply(msg, context)
 
-    # Everything else → Gemini
+    # 6️⃣ EVERYTHING ELSE → GEMINI
     return gemini_reply(msg)
 
 # ------------------------------------------------------
@@ -229,3 +244,4 @@ async def webhook(request: Request):
 async def chat_api(request: Request):
     data = await request.json()
     return {"reply": process_message(data.get("message", ""))}
+
