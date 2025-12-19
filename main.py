@@ -16,13 +16,20 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
+# ROOT ROUTE (IMPORTANT FOR HEALTH CHECKS)
+# ------------------------------------------------------
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
+# ------------------------------------------------------
 # GEMINI CONFIG
 # ------------------------------------------------------
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 GEMINI_MODEL = "models/gemini-2.5-flash"
 
 # ------------------------------------------------------
-# FIRESTORE
+# FIRESTORE (IAM-BASED, NO JSON KEY)
 # ------------------------------------------------------
 db = firestore.Client()
 
@@ -120,25 +127,21 @@ QUESTION:
 def process_message(msg: str) -> str:
     text = msg.lower().strip()
 
-    # 1️⃣ Greeting
     greet = handle_greeting(text)
     if greet:
         return greet
 
-    # 2️⃣ Date / Time
     if "time" in text or "date" in text:
         ist = pytz.timezone("Asia/Kolkata")
         now = datetime.now(ist)
         return f"📅 Date: {now.strftime('%d %B %Y')}\n⏰ Time: {now.strftime('%I:%M %p')} (IST)"
 
-    # 3️⃣ Bot Identity
     if any(k in text for k in ["who developed you", "who created you", "your creator", "your developer"]):
         return (
             "I was developed by Sujith Lavudu and Vennela Barnana "
             "for Lovely Professional University (LPU)."
         )
 
-    # 4️⃣ Creator Details
     if "sujith lavudu" in text:
         return (
             "Sujith Lavudu is a student innovator, software developer, and author. "
@@ -153,11 +156,9 @@ def process_message(msg: str) -> str:
             "and co-author of the book 'Decode the Code'."
         )
 
-    # 5️⃣ UPSC / GK / PEOPLE → GEMINI ONLY
     if any(k in text for k in ["upsc", "gk", "general knowledge", "ias", "ips", "who is", "biography"]):
         return gemini_reply(msg)
 
-    # 6️⃣ LPU QUESTIONS → LPU DATA FIRST
     LPU_KEYWORDS = [
         "lpu", "lovely professional university",
         "ums", "rms",
@@ -170,17 +171,14 @@ def process_message(msg: str) -> str:
         admin_data = load_admin_lpu_content()
         context = STATIC_LPU + "\n\n" + admin_data
 
-        # If LPU data exists → use it
         if context.strip():
             return gemini_reply(msg, context)
 
-        # If not found → Gemini with LPU-style answer
         return gemini_reply(
             msg,
             "Answer using general verified knowledge of Lovely Professional University."
         )
 
-    # 7️⃣ EVERYTHING ELSE → GEMINI
     return gemini_reply(msg)
 
 # ------------------------------------------------------
@@ -235,13 +233,25 @@ async def webhook(request: Request):
     return {"status": "ok"}
 
 # ------------------------------------------------------
-# FLUTTER CHAT API
+# FLUTTER CHAT API (SAFE)
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
-    data = await request.json()
-    return {"reply": process_message(data.get("message", ""))}
+    try:
+        data = await request.json()
+        msg = data.get("message", "")
+        logging.info(f"Chat message: {msg}")
 
+        reply = process_message(msg)
+        return {"reply": reply}
+
+    except Exception as e:
+        logging.exception("Chat endpoint failed")
+        return {"reply": "Internal error. Please try again."}
+
+# ------------------------------------------------------
+# LOCAL RUN (OPTIONAL)
+# ------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     uvicorn.run(
@@ -249,6 +259,3 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port
     )
-
-
-
