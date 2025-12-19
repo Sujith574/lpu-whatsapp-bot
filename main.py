@@ -10,14 +10,6 @@ from google.cloud import firestore
 from google import genai
 
 # ------------------------------------------------------
-# GOOGLE CREDENTIALS (Render-safe)
-# ------------------------------------------------------
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
-    "GOOGLE_APPLICATION_CREDENTIALS",
-    "/etc/secrets/serviceAccountKey.json"
-)
-
-# ------------------------------------------------------
 # APP INIT
 # ------------------------------------------------------
 app = FastAPI()
@@ -257,5 +249,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port
     )
+
 
 
