@@ -4,6 +4,7 @@ import logging
 import requests
 from datetime import datetime
 import pytz
+import uvicorn
 
 from google.cloud import firestore
 from google import genai
@@ -248,3 +249,13 @@ async def webhook(request: Request):
 async def chat_api(request: Request):
     data = await request.json()
     return {"reply": process_message(data.get("message", ""))}
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port
+    )
+
+
