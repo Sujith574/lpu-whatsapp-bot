@@ -4,7 +4,6 @@ import logging
 import requests
 from datetime import datetime
 import pytz
-import uvicorn
 
 from google.cloud import firestore
 from google import genai
@@ -16,10 +15,10 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# ROOT ROUTE (IMPORTANT FOR HEALTH CHECKS)
+# HEALTH CHECK (VERY IMPORTANT FOR CLOUD RUN)
 # ------------------------------------------------------
 @app.get("/")
-def root():
+def health():
     return {"status": "ok"}
 
 # ------------------------------------------------------
@@ -29,9 +28,10 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 GEMINI_MODEL = "models/gemini-2.5-flash"
 
 # ------------------------------------------------------
-# FIRESTORE (IAM-BASED, NO JSON KEY)
+# FIRESTORE (LAZY INIT — FIXES CRASH)
 # ------------------------------------------------------
-db = firestore.Client()
+def get_db():
+    return firestore.Client()
 
 # ------------------------------------------------------
 # WHATSAPP ENV
@@ -57,6 +57,7 @@ STATIC_LPU = load_lpu_knowledge()
 # ------------------------------------------------------
 def load_admin_lpu_content():
     try:
+        db = get_db()
         docs = (
             db.collection("lpu_content")
             .order_by("createdAt", direction=firestore.Query.DESCENDING)
@@ -88,7 +89,7 @@ def handle_greeting(text: str):
             "• LPU exams, attendance, hostels, fees\n"
             "• RMS, UMS, registrations\n"
             "• UPSC, GK, people\n"
-            "• Weather, date & time"
+            "• Date & time"
         )
     return None
 
@@ -127,64 +128,48 @@ QUESTION:
 def process_message(msg: str) -> str:
     text = msg.lower().strip()
 
+    # Greeting
     greet = handle_greeting(text)
     if greet:
         return greet
 
+    # Date / Time
     if "time" in text or "date" in text:
         ist = pytz.timezone("Asia/Kolkata")
         now = datetime.now(ist)
         return f"📅 Date: {now.strftime('%d %B %Y')}\n⏰ Time: {now.strftime('%I:%M %p')} (IST)"
 
-    if any(k in text for k in ["who developed you", "who created you", "your creator", "your developer"]):
+    # Identity
+    if "who developed you" in text or "who created you" in text:
         return (
             "I was developed by Sujith Lavudu and Vennela Barnana "
             "for Lovely Professional University (LPU)."
         )
 
-    if "sujith lavudu" in text:
-        return (
-            "Sujith Lavudu is a student innovator, software developer, and author. "
-            "He is the co-creator of the LPU Vertosewa AI Assistant "
-            "and co-author of the book 'Decode the Code'."
-        )
-
-    if "vennela barnana" in text or "vennela" in text:
-        return (
-            "Vennela Barnana is an author and researcher. "
-            "She is the co-creator of the LPU Vertosewa AI Assistant "
-            "and co-author of the book 'Decode the Code'."
-        )
-
-    if any(k in text for k in ["upsc", "gk", "general knowledge", "ias", "ips", "who is", "biography"]):
-        return gemini_reply(msg)
-
+    # LPU Queries
     LPU_KEYWORDS = [
         "lpu", "lovely professional university",
-        "ums", "rms",
-        "attendance", "hostel", "fee", "fees",
-        "semester", "registration",
-        "reappear", "mid term", "end term"
+        "ums", "rms", "attendance", "hostel",
+        "fee", "fees", "semester",
+        "registration", "reappear",
+        "mid term", "end term"
     ]
 
     if any(k in text for k in LPU_KEYWORDS):
         admin_data = load_admin_lpu_content()
         context = STATIC_LPU + "\n\n" + admin_data
+        return gemini_reply(msg, context)
 
-        if context.strip():
-            return gemini_reply(msg, context)
-
-        return gemini_reply(
-            msg,
-            "Answer using general verified knowledge of Lovely Professional University."
-        )
-
+    # Everything else → Gemini
     return gemini_reply(msg)
 
 # ------------------------------------------------------
 # SEND WHATSAPP MESSAGE
 # ------------------------------------------------------
 def send_whatsapp(to: str, text: str):
+    if not WHATSAPP_TOKEN or not PHONE_NUMBER_ID:
+        return
+
     requests.post(
         f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages",
         headers={
@@ -200,14 +185,19 @@ def send_whatsapp(to: str, text: str):
     )
 
 # ------------------------------------------------------
-# WEBHOOK VERIFY
+# WEBHOOK VERIFY (META)
 # ------------------------------------------------------
 @app.get("/webhook")
 async def verify(request: Request):
-    params = dict(request.query_params)
-    if params.get("hub.verify_token") == VERIFY_TOKEN:
+    params = request.query_params
+
+    if (
+        params.get("hub.mode") == "subscribe"
+        and params.get("hub.verify_token") == VERIFY_TOKEN
+    ):
         return int(params.get("hub.challenge"))
-    return "Invalid token"
+
+    return {"error": "Invalid token"}
 
 # ------------------------------------------------------
 # WEBHOOK RECEIVE (WHATSAPP)
@@ -233,29 +223,9 @@ async def webhook(request: Request):
     return {"status": "ok"}
 
 # ------------------------------------------------------
-# FLUTTER CHAT API (SAFE)
+# FLUTTER CHAT API
 # ------------------------------------------------------
 @app.post("/chat")
 async def chat_api(request: Request):
-    try:
-        data = await request.json()
-        msg = data.get("message", "")
-        logging.info(f"Chat message: {msg}")
-
-        reply = process_message(msg)
-        return {"reply": reply}
-
-    except Exception as e:
-        logging.exception("Chat endpoint failed")
-        return {"reply": "Internal error. Please try again."}
-
-# ------------------------------------------------------
-# LOCAL RUN (OPTIONAL)
-# ------------------------------------------------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port
-    )
+    data = await request.json()
+    return {"reply": process_message(data.get("message", ""))}
