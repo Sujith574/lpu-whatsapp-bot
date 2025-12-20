@@ -15,7 +15,7 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
 # ------------------------------------------------------
-# HEALTH CHECK (VERY IMPORTANT FOR CLOUD RUN)
+# HEALTH CHECK (CLOUD RUN)
 # ------------------------------------------------------
 @app.get("/")
 def health():
@@ -28,7 +28,7 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 GEMINI_MODEL = "models/gemini-2.5-flash"
 
 # ------------------------------------------------------
-# FIRESTORE (LAZY INIT — FIXES CRASH)
+# FIRESTORE (LAZY INIT)
 # ------------------------------------------------------
 def get_db():
     return firestore.Client()
@@ -47,36 +47,40 @@ def load_lpu_knowledge():
     try:
         with open("lpu_knowledge.txt", "r", encoding="utf-8") as f:
             return f.read()
-    except Exception:
+    except:
         return ""
 
 STATIC_LPU = load_lpu_knowledge()
 
 # ------------------------------------------------------
-# LOAD ADMIN CONTENT (FIRESTORE)
+# LOAD ADMIN CONTENT (CATEGORY + KEYWORDS)
 # ------------------------------------------------------
-def load_admin_lpu_content():
-    try:
-        db = get_db()
-        docs = (
-            db.collection("lpu_content")
-            .order_by("createdAt", direction=firestore.Query.DESCENDING)
-            .limit(25)
-            .stream()
-        )
+def search_admin_content(question: str):
+    db = get_db()
+    q = question.lower()
+    matches = []
 
-        content = ""
-        for doc in docs:
-            d = doc.to_dict()
-            body = d.get("textContent") or d.get("summary") or ""
-            title = d.get("title", "")
-            if body:
-                content += f"{title}:\n{body}\n\n"
+    docs = (
+        db.collection("lpu_content")
+        .order_by("createdAt", direction=firestore.Query.DESCENDING)
+        .limit(50)
+        .stream()
+    )
 
-        return content
-    except Exception as e:
-        logging.error(f"Firestore error: {e}")
-        return ""
+    for doc in docs:
+        d = doc.to_dict()
+
+        text = (d.get("textContent") or "").lower()
+        keywords = d.get("keywords") or []
+        category = (d.get("category") or "").lower()
+
+        # Match by keyword OR category
+        if any(k in q for k in keywords) or category in q:
+            matches.append(
+                f"{d.get('title','')}:\n{d.get('textContent','')}"
+            )
+
+    return "\n\n".join(matches)
 
 # ------------------------------------------------------
 # GREETING
@@ -87,26 +91,27 @@ def handle_greeting(text: str):
             "Hello! 👋\n\n"
             "You can ask about:\n"
             "• LPU exams, attendance, hostels, fees\n"
-            "• RMS, UMS, registrations\n"
+            "• RMS / UMS / registrations\n"
+            "• DSW notices\n"
             "• UPSC, GK, people\n"
             "• Date & time"
         )
     return None
 
 # ------------------------------------------------------
-# GEMINI RESPONSE
+# GEMINI RESPONSE (SAFE)
 # ------------------------------------------------------
 def gemini_reply(question: str, context: str = ""):
     prompt = f"""
-You are an intelligent educational assistant.
+You are an educational assistant.
 
 Rules:
 - Reply only in English
-- Be clear, accurate, and professional
-- If LPU context is given, prioritize it
-- Never say information is unavailable
+- Be accurate, professional, concise
+- If LPU context is provided, use ONLY that
+- Do not guess or invent facts
 
-LPU CONTEXT (if any):
+LPU CONTEXT:
 {context}
 
 QUESTION:
@@ -119,7 +124,7 @@ QUESTION:
         )
         return res.text.strip()
     except Exception as e:
-        logging.error(f"Gemini error: {e}")
+        logging.error(e)
         return "Please try again later."
 
 # ------------------------------------------------------
@@ -128,7 +133,7 @@ QUESTION:
 def process_message(msg: str) -> str:
     text = msg.lower().strip()
 
-    # 1️⃣ FIXED IDENTITY RESPONSES (TOP PRIORITY)
+    # 1️⃣ FIXED PERSON IDENTITIES
     if "sujith lavudu" in text:
         return (
             "Sujith Lavudu is a student innovator, software developer, and author. "
@@ -136,11 +141,16 @@ def process_message(msg: str) -> str:
             "and co-author of the book 'Decode the Code'."
         )
 
-    if "vennela barnana" in text or "vennela" in text:
+    if "vennela barnana" in text:
         return (
             "Vennela Barnana is an author and researcher. "
             "She is the co-creator of the LPU Vertosewa AI Assistant "
             "and co-author of the book 'Decode the Code'."
+        )
+
+    if "rashmi mittal" in text:
+        return (
+            "Dr. Rashmi Mittal is the Pro-Chancellor of Lovely Professional University (LPU)."
         )
 
     # 2️⃣ GREETING
@@ -152,28 +162,40 @@ def process_message(msg: str) -> str:
     if "time" in text or "date" in text:
         ist = pytz.timezone("Asia/Kolkata")
         now = datetime.now(ist)
-        return f"📅 Date: {now.strftime('%d %B %Y')}\n⏰ Time: {now.strftime('%I:%M %p')} (IST)"
+        return (
+            f"📅 Date: {now.strftime('%d %B %Y')}\n"
+            f"⏰ Time: {now.strftime('%I:%M %p')} (IST)"
+        )
 
     # 4️⃣ BOT IDENTITY
-    if any(k in text for k in ["who developed you", "who created you", "your creator", "your developer"]):
+    if any(k in text for k in [
+        "who developed you", "who created you",
+        "your developer", "your creator"
+    ]):
         return (
             "I was developed by Sujith Lavudu and Vennela Barnana "
             "for Lovely Professional University (LPU)."
         )
 
-    # 5️⃣ LPU QUESTIONS
-    LPU_KEYWORDS = [
+    # 5️⃣ LPU-FIRST LOGIC
+    LPU_TERMS = [
         "lpu", "lovely professional university",
-        "ums", "rms",
-        "attendance", "hostel", "fee", "fees",
-        "semester", "registration",
+        "ums", "rms", "dsw",
+        "attendance", "hostel", "fees",
+        "exam", "semester", "registration",
         "reappear", "mid term", "end term"
     ]
 
-    if any(k in text for k in LPU_KEYWORDS):
-        admin_data = load_admin_lpu_content()
-        context = STATIC_LPU + "\n\n" + admin_data
-        return gemini_reply(msg, context)
+    if any(k in text for k in LPU_TERMS):
+        admin_answer = search_admin_content(msg)
+
+        if admin_answer.strip():
+            return gemini_reply(msg, admin_answer)
+
+        if STATIC_LPU.strip():
+            return gemini_reply(msg, STATIC_LPU)
+
+        return "No official LPU update is available for this query yet."
 
     # 6️⃣ EVERYTHING ELSE → GEMINI
     return gemini_reply(msg)
@@ -200,40 +222,37 @@ def send_whatsapp(to: str, text: str):
     )
 
 # ------------------------------------------------------
-# WEBHOOK VERIFY (META)
+# WEBHOOK VERIFY
 # ------------------------------------------------------
 @app.get("/webhook")
 async def verify(request: Request):
     params = request.query_params
-
     if (
         params.get("hub.mode") == "subscribe"
         and params.get("hub.verify_token") == VERIFY_TOKEN
     ):
         return int(params.get("hub.challenge"))
-
     return {"error": "Invalid token"}
 
 # ------------------------------------------------------
-# WEBHOOK RECEIVE (WHATSAPP)
+# WEBHOOK RECEIVE
 # ------------------------------------------------------
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
-
     try:
         value = data["entry"][0]["changes"][0]["value"]
         if "messages" not in value:
             return {"status": "ignored"}
 
-        message = value["messages"][0]["text"]["body"]
+        msg = value["messages"][0]["text"]["body"]
         sender = value["messages"][0]["from"]
 
-        reply = process_message(message)
+        reply = process_message(msg)
         send_whatsapp(sender, reply)
 
     except Exception as e:
-        logging.error(f"Webhook error: {e}")
+        logging.error(e)
 
     return {"status": "ok"}
 
@@ -244,4 +263,3 @@ async def webhook(request: Request):
 async def chat_api(request: Request):
     data = await request.json()
     return {"reply": process_message(data.get("message", ""))}
-
