@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Request
 import os
 import logging
-import requests
 from datetime import datetime
 import pytz
 
@@ -34,26 +33,19 @@ def get_db():
     return firestore.Client()
 
 # ------------------------------------------------------
-# WHATSAPP ENV
-# ------------------------------------------------------
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "sujith_token_123")
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
-PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
-
-# ------------------------------------------------------
 # LOAD STATIC LPU KNOWLEDGE
 # ------------------------------------------------------
 def load_lpu_knowledge():
     try:
         with open("lpu_knowledge.txt", "r", encoding="utf-8") as f:
             return f.read()
-    except:
+    except Exception:
         return ""
 
 STATIC_LPU = load_lpu_knowledge()
 
 # ------------------------------------------------------
-# LOAD ADMIN CONTENT (CATEGORY + KEYWORDS)
+# SEARCH ADMIN CONTENT (CATEGORY + KEYWORDS)
 # ------------------------------------------------------
 def search_admin_content(question: str):
     db = get_db()
@@ -74,7 +66,6 @@ def search_admin_content(question: str):
         keywords = d.get("keywords") or []
         category = (d.get("category") or "").lower()
 
-        # Match by keyword OR category
         if any(k in q for k in keywords) or category in q:
             matches.append(
                 f"{d.get('title','')}:\n{d.get('textContent','')}"
@@ -99,7 +90,7 @@ def handle_greeting(text: str):
     return None
 
 # ------------------------------------------------------
-# GEMINI RESPONSE (SAFE)
+# GEMINI RESPONSE
 # ------------------------------------------------------
 def gemini_reply(question: str, context: str = ""):
     prompt = f"""
@@ -107,9 +98,10 @@ You are an educational assistant.
 
 Rules:
 - Reply only in English
-- Be accurate, professional, concise
-- If LPU context is provided, use ONLY that
-- Do not guess or invent facts
+- Be accurate, professional, and concise
+- If LPU context is provided, strictly use it
+- If no context is provided, answer from general knowledge
+- Never say "context not provided"
 
 LPU CONTEXT:
 {context}
@@ -133,7 +125,7 @@ QUESTION:
 def process_message(msg: str) -> str:
     text = msg.lower().strip()
 
-    # 1️⃣ FIXED PERSON IDENTITIES
+    # 1️⃣ FIXED IDENTITIES (HIGHEST PRIORITY)
     if "sujith lavudu" in text:
         return (
             "Sujith Lavudu is a student innovator, software developer, and author. "
@@ -150,7 +142,8 @@ def process_message(msg: str) -> str:
 
     if "rashmi mittal" in text:
         return (
-            "Dr. Rashmi Mittal is the Pro-Chancellor of Lovely Professional University (LPU)."
+            "Dr. Rashmi Mittal is the Pro-Chancellor of "
+            "Lovely Professional University (LPU)."
         )
 
     # 2️⃣ GREETING
@@ -169,8 +162,10 @@ def process_message(msg: str) -> str:
 
     # 4️⃣ BOT IDENTITY
     if any(k in text for k in [
-        "who developed you", "who created you",
-        "your developer", "your creator"
+        "who developed you",
+        "who created you",
+        "your developer",
+        "your creator"
     ]):
         return (
             "I was developed by Sujith Lavudu and Vennela Barnana "
@@ -197,64 +192,8 @@ def process_message(msg: str) -> str:
 
         return "No official LPU update is available for this query yet."
 
-    # 6️⃣ EVERYTHING ELSE → GEMINI
+    # 6️⃣ GENERAL QUESTIONS → GEMINI
     return gemini_reply(msg)
-
-# ------------------------------------------------------
-# SEND WHATSAPP MESSAGE
-# ------------------------------------------------------
-def send_whatsapp(to: str, text: str):
-    if not WHATSAPP_TOKEN or not PHONE_NUMBER_ID:
-        return
-
-    requests.post(
-        f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages",
-        headers={
-            "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "messaging_product": "whatsapp",
-            "to": to,
-            "type": "text",
-            "text": {"body": text},
-        },
-    )
-
-# ------------------------------------------------------
-# WEBHOOK VERIFY
-# ------------------------------------------------------
-@app.get("/webhook")
-async def verify(request: Request):
-    params = request.query_params
-    if (
-        params.get("hub.mode") == "subscribe"
-        and params.get("hub.verify_token") == VERIFY_TOKEN
-    ):
-        return int(params.get("hub.challenge"))
-    return {"error": "Invalid token"}
-
-# ------------------------------------------------------
-# WEBHOOK RECEIVE
-# ------------------------------------------------------
-@app.post("/webhook")
-async def webhook(request: Request):
-    data = await request.json()
-    try:
-        value = data["entry"][0]["changes"][0]["value"]
-        if "messages" not in value:
-            return {"status": "ignored"}
-
-        msg = value["messages"][0]["text"]["body"]
-        sender = value["messages"][0]["from"]
-
-        reply = process_message(msg)
-        send_whatsapp(sender, reply)
-
-    except Exception as e:
-        logging.error(e)
-
-    return {"status": "ok"}
 
 # ------------------------------------------------------
 # FLUTTER CHAT API
@@ -262,4 +201,9 @@ async def webhook(request: Request):
 @app.post("/chat")
 async def chat_api(request: Request):
     data = await request.json()
-    return {"reply": process_message(data.get("message", ""))}
+    message = data.get("message", "").strip()
+
+    if not message:
+        return {"reply": "Please enter a valid question."}
+
+    return {"reply": process_message(message)}
